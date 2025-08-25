@@ -56,72 +56,6 @@ local colors = {
     error = 0xFF4444
 }
 
--- Функция для красивого отображения текста
-local function drawText(x, y, text, color)
-    color = color or colors.text
-    gpu.setForeground(color)
-    gpu.set(x, y, text)
-end
-
--- Функция для отрисовки прямоугольника
-local function drawRect(x, y, width, height, bgColor)
-    gpu.setBackground(bgColor)
-    gpu.fill(x, y, width, height, " ")
-end
-
--- Функция для отрисовки кнопки
-local function drawButton(x, y, width, height, text, isActive, isHovered)
-    local bgColor
-    if not isActive then
-        bgColor = 0x555555
-    else
-        bgColor = isHovered and colors.button_hover or colors.button
-    end
-    
-    drawRect(x, y, width, height, bgColor)
-    drawText(math.floor(x + (width - unicode.len(text)) / 2), math.floor(y + height / 2), text, colors.button_text)
-end
-
--- Функция для отрисовки элемента диска
-local function drawDiskItem(x, y, width, disk, isSelected, index)
-    local bgColor = isSelected and colors.disk_selected or colors.disk_normal
-    local textColor = colors.disk_text
-    
-    drawRect(x, y, width, 3, bgColor)
-    
-    -- Буква диска
-    drawText(x + 2, y + 1, disk.letter .. ":", 0xAAAAAA)
-    
-    -- Название диска
-    local nameX = x + 5
-    local nameText = disk.label
-    if unicode.len(nameText) > width - 10 then
-        nameText = unicode.sub(nameText, 1, width - 13) .. "..."
-    end
-    drawText(nameX, y + 1, nameText, textColor)
-    
-    -- Адрес (укороченный)
-    local addrText = "(" .. disk.address:sub(1, 6) .. ")"
-    drawText(x + width - unicode.len(addrText) - 2, y + 1, addrText, 0x888888)
-end
-
--- Функция для отрисовки прогрессбара
-local function drawProgressBar(x, y, width, height, progress, text)
-    -- Фон
-    drawRect(x, y, width, height, colors.progress_bg)
-    
-    -- Заполненная часть
-    local fillWidth = math.max(1, math.floor(width * progress / 100))
-    if fillWidth > 0 then
-        drawRect(x, y, fillWidth, height, colors.progress_fg)
-    end
-    
-    -- Текст
-    if text then
-        drawText(math.floor(x + (width - unicode.len(text)) / 2), y + 1, text, colors.text)
-    end
-end
-
 -- Основная функция
 local function main()
     -- Инициализация
@@ -133,6 +67,72 @@ local function main()
     
     local gpu = init_result.gpu
     local screen_width, screen_height = init_result.screen_width, init_result.screen_height
+    
+    -- Функция для красивого отображения текста
+    local function drawText(x, y, text, color)
+        color = color or colors.text
+        gpu.setForeground(color)
+        gpu.set(x, y, text)
+    end
+
+    -- Функция для отрисовки прямоугольника
+    local function drawRect(x, y, width, height, bgColor)
+        gpu.setBackground(bgColor)
+        gpu.fill(x, y, width, height, " ")
+    end
+
+    -- Функция для отрисовки кнопки
+    local function drawButton(x, y, width, height, text, isActive, isHovered)
+        local bgColor
+        if not isActive then
+            bgColor = 0x555555
+        else
+            bgColor = isHovered and colors.button_hover or colors.button
+        end
+        
+        drawRect(x, y, width, height, bgColor)
+        drawText(math.floor(x + (width - unicode.len(text)) / 2), math.floor(y + height / 2), text, colors.button_text)
+    end
+
+    -- Функция для отрисовки элемента диска
+    local function drawDiskItem(x, y, width, disk, isSelected, index)
+        local bgColor = isSelected and colors.disk_selected or colors.disk_normal
+        local textColor = colors.disk_text
+        
+        drawRect(x, y, width, 3, bgColor)
+        
+        -- Буква диска
+        drawText(x + 2, y + 1, disk.letter .. ":", 0xAAAAAA)
+        
+        -- Название диска
+        local nameX = x + 5
+        local nameText = disk.label
+        if unicode.len(nameText) > width - 10 then
+            nameText = unicode.sub(nameText, 1, width - 13) .. "..."
+        end
+        drawText(nameX, y + 1, nameText, textColor)
+        
+        -- Адрес (укороченный)
+        local addrText = "(" .. disk.address:sub(1, 6) .. ")"
+        drawText(x + width - unicode.len(addrText) - 2, y + 1, addrText, 0x888888)
+    end
+
+    -- Функция для отрисовки прогрессбара
+    local function drawProgressBar(x, y, width, height, progress, text)
+        -- Фон
+        drawRect(x, y, width, height, colors.progress_bg)
+        
+        -- Заполненная часть
+        local fillWidth = math.max(1, math.floor(width * progress / 100))
+        if fillWidth > 0 then
+            drawRect(x, y, fillWidth, height, colors.progress_fg)
+        end
+        
+        -- Текст
+        if text then
+            drawText(math.floor(x + (width - unicode.len(text)) / 2), y + 1, text, colors.text)
+        end
+    end
     
     -- Функция очистки экрана
     local function clearScreen()
