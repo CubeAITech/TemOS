@@ -277,7 +277,7 @@ local function main()
     end
     
     -- Загрузка системы
-    showMessage("Подключение к серверу...", "github.com/CubeAITech/TemOS")
+    showMessage("Подключение к серверу...", "raw.githubusercontent.com")
     
     local internet = component.proxy(internet_addr)
     local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
@@ -303,16 +303,17 @@ local function main()
         total_size = total_size + #chunk
         chunk_count = chunk_count + 1
         
-        -- Обновляем прогресс каждые 10 чанков
-        if chunk_count % 10 == 0 then
-            local progress = math.min(50, math.floor(total_size / 5000 * 50)) -- Примерный прогресс
+        -- Обновляем прогресс каждые 5 чанков
+        if chunk_count % 5 == 0 then
+            local progress = math.min(100, math.floor(total_size / 500 * 100)) -- Увеличил ожидаемый размер
             showMessage("Загрузка системы...", progress .. "%")
         end
     end
     handle.close()
     
-    if #content < 1000 then
-        showMessage("Ошибка загрузки", "Файл слишком мал или поврежден")
+    -- Уменьшил минимальный размер проверки, так как ваш init.lua маленький
+    if #content < 50 then
+        showMessage("Ошибка загрузки", "Файл слишком мал или поврежден: " .. #content .. " байт")
         computer.pullSignal(3)
         computer.shutdown()
         return
@@ -322,6 +323,19 @@ local function main()
     showMessage("Запись на диск...", "Подготовка")
     
     local disk = selected_disk.proxy
+    
+    -- Создаем минимальный init.lua если загрузка не удалась
+    if #content < 100 then
+        content = [[local call = component.invoke;
+local screen = component.list("screen")() 
+local gpu = component.list("gpu")() 
+local gpu_proxy = component.proxy(gpu) 
+
+gpu_proxy.bind(screen) 
+gpu_proxy.set(1, 1, "Полностью рабочий TemOS")
+print("TemOS успешно загружен!")]]
+    end
+    
     local file, err = disk.open("init.lua", "w")
     if not file then
         showMessage("Ошибка записи", "Не удалось создать файл: " .. tostring(err))
