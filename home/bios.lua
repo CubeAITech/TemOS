@@ -2,21 +2,6 @@ local unicode = unicode or utf8
 local component = component
 local computer = computer
 
--- Проверяем доступность event и загружаем его правильно
-local event
-if _G.event then
-    event = _G.event
-else
-    -- Пытаемся загрузить через component
-    for address, type in component.list("event") do
-        event = component.proxy(address)
-        break
-    end
-    if not event then
-        error("Не найден компонент event")
-    end
-end
-
 -- Инициализация компонентов
 local component_screen
 local component_gpu
@@ -98,6 +83,14 @@ local function drawDiskItem(x, y, width, disk, isSelected, index)
     drawBox(x, y, width, 3, bgColor, text, colors.disk_text)
 end
 
+-- Функция ожидания с таймаутом
+local function wait(timeout)
+    local deadline = computer.uptime() + (timeout or 0)
+    while computer.uptime() < deadline do
+        computer.pullSignal(deadline - computer.uptime())
+    end
+end
+
 -- Основной интерфейс установки
 local function showInstallationScreen(disks)
     clearScreen()
@@ -138,12 +131,14 @@ local function showInstallationScreen(disks)
     -- Обработка событий
     if #disks == 1 then
         -- Автоматическая установка при одном диске
-        computer.pullSignal(2)
+        wait(2)
         return disks[1]
     else
         -- Ручной выбор при нескольких дисках
         while true do
-            local e, _, x, y = event.pull("touch")
+            local signal = {computer.pullSignal()}
+            local e, _, x, y = unpack(signal)
+            
             if e == "touch" then
                 -- Проверка клика по диску
                 for i = 1, #disks do
@@ -257,7 +252,7 @@ local function start()
     
     if #disks == 0 then
         showProgress("Ошибка: Для установки системы требуется диск", 0)
-        computer.pullSignal(3)
+        wait(3)
         computer.shutdown()
         return
     end
@@ -267,7 +262,7 @@ local function start()
         if disk.label == "delay" and disk.has_init then
             -- Загрузка существующей системы
             showProgress("Загрузка существующей системы...", 0)
-            computer.pullSignal(1)
+            wait(1)
             
             -- Запускаем init.lua напрямую через component
             local success, result = pcall(function()
@@ -312,9 +307,9 @@ local function start()
     showProgress("Загрузка системы...", 25)
     
     -- Загрузка с URL
-    local content, err = pcall(httpRequest, "https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
-    if not content or type(content) ~= "string" then
-        error("Ошибка загрузки системы из интернета: " .. tostring(err))
+    local success, content = pcall(httpRequest, "https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
+    if not success or type(content) ~= "string" then
+        error("Ошибка загрузки системы из интернета: " .. tostring(content))
     end
     
     showProgress("Запись на диск...", 50)
@@ -339,11 +334,11 @@ local function start()
     local success, err = pcall(disk_proxy.setLabel, "delay")
     if not success then
         showProgress("Предупреждение: Не удалось установить метку диска", 75)
-        computer.pullSignal(2)
+        wait(2)
     end
     
     showProgress("Установка завершена!", 100)
-    computer.pullSignal(2)
+    wait(2)
     
     computer.shutdown(true)
 end
@@ -362,8 +357,12 @@ if not status then
         -- Вывод ошибки
         local errorMsg = tostring(err)
         local y = math.floor(screen_height/2)
+        if unicode.len(errorMsg) > screen_width then
+            -- Обрезаем слишком длинные сообщения
+            errorMsg = unicode.sub(errorMsg, 1, screen_width - 3) .. "..."
+        end
         gpu.set(math.floor((screen_width - unicode.len(errorMsg)) / 2), y, errorMsg)
     end)
-    computer.pullSignal(5)
+    wait(5)
     computer.shutdown()
 end
