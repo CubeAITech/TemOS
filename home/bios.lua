@@ -42,7 +42,8 @@ end
 local colors = {
     background = 0x1E1E1E,
     header_bg = 0x2D2D2D,
-    text = 0xFFFFFF,
+    header_text = 0xFFFFFF,
+    text = 0xCCCCCC,
     accent = 0x0078D7,
     button = 0x0078D7,
     button_hover = 0x106EBE,
@@ -50,20 +51,75 @@ local colors = {
     disk_normal = 0x3C3C3C,
     disk_selected = 0x0078D7,
     disk_text = 0xFFFFFF,
-    error = 0xFF0000
+    progress_bg = 0x444444,
+    progress_fg = 0x00AA00,
+    error = 0xFF4444
 }
 
--- Функция проверки существующей системы
-local function hasExistingSystem(disk)
-    local exists = disk.proxy.exists("init.lua")
-    if exists then
-        local handle = disk.proxy.open("init.lua", "r")
-        if handle then
-            disk.proxy.close(handle)
-            return true
-        end
+-- Функция для красивого отображения текста
+local function drawText(x, y, text, color)
+    color = color or colors.text
+    gpu.setForeground(color)
+    gpu.set(x, y, text)
+end
+
+-- Функция для отрисовки прямоугольника
+local function drawRect(x, y, width, height, bgColor)
+    gpu.setBackground(bgColor)
+    gpu.fill(x, y, width, height, " ")
+end
+
+-- Функция для отрисовки кнопки
+local function drawButton(x, y, width, height, text, isActive, isHovered)
+    local bgColor
+    if not isActive then
+        bgColor = 0x555555
+    else
+        bgColor = isHovered and colors.button_hover or colors.button
     end
-    return false
+    
+    drawRect(x, y, width, height, bgColor)
+    drawText(math.floor(x + (width - unicode.len(text)) / 2), math.floor(y + height / 2), text, colors.button_text)
+end
+
+-- Функция для отрисовки элемента диска
+local function drawDiskItem(x, y, width, disk, isSelected, index)
+    local bgColor = isSelected and colors.disk_selected or colors.disk_normal
+    local textColor = colors.disk_text
+    
+    drawRect(x, y, width, 3, bgColor)
+    
+    -- Буква диска
+    drawText(x + 2, y + 1, disk.letter .. ":", 0xAAAAAA)
+    
+    -- Название диска
+    local nameX = x + 5
+    local nameText = disk.label
+    if unicode.len(nameText) > width - 10 then
+        nameText = unicode.sub(nameText, 1, width - 13) .. "..."
+    end
+    drawText(nameX, y + 1, nameText, textColor)
+    
+    -- Адрес (укороченный)
+    local addrText = "(" .. disk.address:sub(1, 6) .. ")"
+    drawText(x + width - unicode.len(addrText) - 2, y + 1, addrText, 0x888888)
+end
+
+-- Функция для отрисовки прогрессбара
+local function drawProgressBar(x, y, width, height, progress, text)
+    -- Фон
+    drawRect(x, y, width, height, colors.progress_bg)
+    
+    -- Заполненная часть
+    local fillWidth = math.max(1, math.floor(width * progress / 100))
+    if fillWidth > 0 then
+        drawRect(x, y, fillWidth, height, colors.progress_fg)
+    end
+    
+    -- Текст
+    if text then
+        drawText(math.floor(x + (width - unicode.len(text)) / 2), y + 1, text, colors.text)
+    end
 end
 
 -- Основная функция
@@ -78,38 +134,37 @@ local function main()
     local gpu = init_result.gpu
     local screen_width, screen_height = init_result.screen_width, init_result.screen_height
     
-    -- Функции отрисовки
+    -- Функция очистки экрана
     local function clearScreen()
-        gpu.setBackground(colors.background)
-        gpu.setForeground(colors.text)
-        gpu.fill(1, 1, screen_width, screen_height, " ")
+        drawRect(1, 1, screen_width, screen_height, colors.background)
     end
     
-    local function drawBox(x, y, width, height, bgColor, text, textColor)
-        gpu.setBackground(bgColor)
-        gpu.fill(x, y, width, height, " ")
-        if text then
-            gpu.setForeground(textColor or colors.text)
-            local textX = math.floor(x + (width - unicode.len(text)) / 2)
-            local textY = math.floor(y + height / 2)
-            gpu.set(textX, textY, text)
-        end
-    end
-    
-    local function showMessage(message)
+    -- Функция отображения сообщения
+    local function showMessage(message, submessage)
         clearScreen()
-        gpu.setForeground(colors.text)
-        local x = math.floor((screen_width - unicode.len(message)) / 2)
-        local y = math.floor(screen_height / 2)
-        gpu.set(x, y, message)
-        computer.pullSignal(0.1) -- Обновляем экран
+        
+        -- Заголовок
+        drawRect(1, 1, screen_width, 3, colors.header_bg)
+        drawText(math.floor((screen_width - unicode.len("TemOS Installer")) / 2), 2, "TemOS Installer", colors.header_text)
+        
+        -- Основное сообщение
+        drawText(math.floor((screen_width - unicode.len(message)) / 2), math.floor(screen_height / 2) - 1, message, colors.text)
+        
+        -- Дополнительное сообщение
+        if submessage then
+            drawText(math.floor((screen_width - unicode.len(submessage)) / 2), math.floor(screen_height / 2) + 1, submessage, 0x888888)
+        end
+        
+        computer.pullSignal(0.1)
     end
     
-    -- Показываем начальное сообщение
-    showMessage("Загрузка установщика TemOS...")
-    computer.pullSignal(1)
+    -- Показываем начальный экран
+    showMessage("Загрузка установщика...", "v1.0")
+    computer.pullSignal(2)
     
     -- Поиск дисков
+    showMessage("Поиск дисков...")
+    
     local disks = {}
     local disk_letters = {"C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"}
     local letter_index = 1
@@ -117,20 +172,17 @@ local function main()
     for address, type in component.list("filesystem") do
         if type == "filesystem" then
             local fs = component.proxy(address)
-            local label = fs.getLabel() or "Без названия"
+            local label = fs.getLabel() or "Локальный диск"
             
             -- Пропускаем tmpfs и read-only файловые системы
             if label ~= "tmpfs" and not fs.isReadOnly() then
                 local disk_letter = disk_letters[letter_index] or "X"
                 letter_index = letter_index + 1
                 
-                local has_system = hasExistingSystem({proxy = fs})
-                
                 table.insert(disks, {
                     address = address,
                     label = label,
-                    display_label = disk_letter .. ": " .. label,
-                    has_system = has_system,
+                    letter = disk_letter,
                     proxy = fs
                 })
             end
@@ -138,89 +190,74 @@ local function main()
     end
     
     if #disks == 0 then
-        showMessage("Нет доступных дисков для установки")
+        showMessage("Ошибка: Нет дисков", "Требуется диск с возможностью записи")
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
     
-    -- Проверяем, есть ли уже установленная система
-    for _, disk in ipairs(disks) do
-        if disk.has_system then
-            showMessage("Загрузка существующей системы...")
-            computer.pullSignal(2)
-            
-            -- Пытаемся загрузить существующую систему
-            local handle = disk.proxy.open("init.lua", "r")
-            if handle then
-                local content = ""
-                while true do
-                    local chunk = disk.proxy.read(handle, math.huge)
-                    if not chunk then break end
-                    content = content .. chunk
-                end
-                disk.proxy.close(handle)
-                
-                -- Запускаем систему
-                local func, err = load(content, "=init.lua")
-                if func then
-                    func()
-                    return -- Система загружена, выходим
-                end
-            end
-        end
-    end
-    
-    -- Если нет установленной системы, показываем меню выбора
+    -- Основной экран выбора диска
     local selected_disk = nil
+    local hover_button = false
     
     while true do
         clearScreen()
-        drawBox(1, 1, screen_width, 3, colors.header_bg, "TemOS - Выбор диска", colors.text)
         
-        gpu.setForeground(colors.text)
-        gpu.set(2, 5, "Выберите диск для установки:")
+        -- Заголовок
+        drawRect(1, 1, screen_width, 3, colors.header_bg)
+        drawText(math.floor((screen_width - unicode.len("Установка TemOS")) / 2), 2, "Установка TemOS", colors.header_text)
+        
+        -- Инструкция
+        drawText(3, 5, "Выберите диск для установки:", colors.text)
+        
+        -- Список дисков
+        local start_y = 7
+        local disk_width = math.min(50, screen_width - 6)
+        local disk_x = math.floor((screen_width - disk_width) / 2)
         
         local disk_items = {}
-        
-        -- Рисуем список дисков
         for i, disk in ipairs(disks) do
-            local y = 7 + (i-1)*2
-            local bg = (selected_disk == disk) and colors.disk_selected or colors.disk_normal
-            local status = disk.has_system and " [Установлено]" or " [Свободно]"
+            local y = start_y + (i-1)*4
             disk_items[i] = {y = y, disk = disk}
-            drawBox(2, y, screen_width - 2, 1, bg, disk.display_label .. status, colors.text)
+            drawDiskItem(disk_x, y, disk_width, disk, selected_disk == disk, i)
         end
         
-        -- Рисуем кнопки
-        local install_y = 7 + #disks * 2 + 2
-        if selected_disk then
-            drawBox(2, install_y, 20, 3, colors.button, "УСТАНОВИТЬ", colors.button_text)
-        end
+        -- Кнопки
+        local buttons_y = start_y + #disks * 4 + 3
+        local button_width = 20
+        local button_x = math.floor((screen_width - button_width) / 2)
         
-        local cancel_y = install_y + 4
-        drawBox(2, cancel_y, 20, 3, colors.disk_normal, "ОТМЕНА", colors.text)
+        -- Кнопка установки
+        local install_active = selected_disk ~= nil
+        drawButton(button_x, buttons_y, button_width, 3, "УСТАНОВИТЬ", install_active, hover_button and install_active)
         
-        -- Ждем выбора пользователя
+        -- Кнопка выхода
+        drawButton(button_x, buttons_y + 5, button_width, 3, "ВЫХОД", true, false)
+        
+        -- Футер
+        drawText(math.floor((screen_width - unicode.len("TemOS v1.0 - Новейшая операционная система")) / 2), 
+                screen_height - 1, "TemOS v1.0 - Новейшая операционная система", 0x888888)
+        
+        -- Ждем ввода пользователя
         local signal = {computer.pullSignal()}
         if signal[1] == "touch" then
             local x, y = signal[3], signal[4]
             
             -- Проверка выбора диска
             for i, item in ipairs(disk_items) do
-                if y == item.y then
+                if y >= item.y and y < item.y + 3 and x >= disk_x and x < disk_x + disk_width then
                     selected_disk = item.disk
                     break
                 end
             end
             
             -- Проверка кнопки установки
-            if selected_disk and y >= install_y and y < install_y + 3 and x >= 2 and x < 22 then
+            if install_active and y >= buttons_y and y < buttons_y + 3 and x >= button_x and x < button_x + button_width then
                 break -- Начинаем установку
             end
             
-            -- Проверка кнопки отмены
-            if y >= cancel_y and y < cancel_y + 3 and x >= 2 and x < 22 then
+            -- Проверка кнопки выхода
+            if y >= buttons_y + 5 and y < buttons_y + 8 and x >= button_x and x < button_x + button_width then
                 computer.shutdown()
                 return
             end
@@ -228,60 +265,76 @@ local function main()
     end
     
     -- Процесс установки
-    showMessage("Проверка сети...")
+    showMessage("Проверка сетевого подключения...")
     
     -- Проверяем наличие интернета
     local internet_addr = component.list("internet")()
     if not internet_addr then
-        showMessage("Ошибка: Требуется сетевая карта")
+        showMessage("Ошибка", "Требуется сетевая карта")
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
     
-    showMessage("Загрузка системы...")
+    -- Загрузка системы
+    showMessage("Подключение к серверу...", "github.com/CubeAITech/TemOS")
     
-    -- Загружаем систему
     local internet = component.proxy(internet_addr)
     local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
     if not handle then
-        showMessage("Ошибка загрузки: " .. tostring(err))
+        showMessage("Ошибка сети", "Не удалось подключиться: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
     
+    -- Чтение данных с прогрессом
     local content = ""
+    local total_size = 0
+    local chunk_count = 0
+    
+    showMessage("Загрузка системы...", "0%")
+    
     while true do
         local chunk = handle.read()
         if not chunk then break end
+        
         content = content .. chunk
+        total_size = total_size + #chunk
+        chunk_count = chunk_count + 1
+        
+        -- Обновляем прогресс каждые 10 чанков
+        if chunk_count % 10 == 0 then
+            local progress = math.min(50, math.floor(total_size / 5000 * 50)) -- Примерный прогресс
+            showMessage("Загрузка системы...", progress .. "%")
+        end
     end
     handle.close()
     
-    if content == "" or #content < 100 then
-        showMessage("Ошибка: Не удалось загрузить систему")
+    if #content < 1000 then
+        showMessage("Ошибка загрузки", "Файл слишком мал или поврежден")
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
     
-    showMessage("Запись на диск...")
+    -- Запись на диск
+    showMessage("Запись на диск...", "Подготовка")
     
-    -- Записываем на диск
     local disk = selected_disk.proxy
     local file, err = disk.open("init.lua", "w")
     if not file then
-        showMessage("Ошибка записи: " .. tostring(err))
+        showMessage("Ошибка записи", "Не удалось создать файл: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
     
+    -- Записываем содержимое
     local success, err = disk.write(file, content)
     if not success then
         disk.close(file)
-        showMessage("Ошибка записи: " .. tostring(err))
+        showMessage("Ошибка записи", "Не удалось записать: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
@@ -289,15 +342,30 @@ local function main()
     
     disk.close(file)
     
-    showMessage("Установка завершена успешно!")
-    computer.pullSignal(2)
+    -- Установка метки
+    pcall(disk.setLabel, "TemOS")
+    
+    -- Финальный экран
+    clearScreen()
+    drawRect(1, 1, screen_width, 3, colors.header_bg)
+    drawText(math.floor((screen_width - unicode.len("Установка завершена!")) / 2), 2, "Установка завершена!", colors.header_text)
+    
+    drawText(math.floor((screen_width - unicode.len("TemOS успешно установлена на диск " .. selected_disk.letter)) / 2), 
+            math.floor(screen_height / 2) - 2, "TemOS успешно установлена на диск " .. selected_disk.letter, colors.text)
+    
+    drawText(math.floor((screen_width - unicode.len("Компьютер будет перезагружен")) / 2), 
+            math.floor(screen_height / 2), "Компьютер будет перезагружен", 0x888888)
+    
+    drawProgressBar(math.floor((screen_width - 40) / 2), math.floor(screen_height / 2) + 3, 40, 2, 100, "Готово!")
+    
+    computer.pullSignal(3)
     computer.shutdown(true)
 end
 
 -- Запуск с обработкой ошибок
 local ok, err = pcall(main)
 if not ok then
-    -- Минимальный вывод ошибки
+    -- Простой вывод ошибки
     local gpu_addr = component.list("gpu")()
     if gpu_addr then
         local gpu = component.proxy(gpu_addr)
