@@ -21,6 +21,20 @@ local gpu = cp(component_gpu)
 gpu.bind(component_screen)
 local gpuX, gpuY = gpu.maxResolution()
 
+-- Функция отображения рамки
+local function drawFrame(x, y, width, height, title)
+    gpu.setBackground(0x1C1C1C)
+    gpu.fill(x, y, width, height, " ")
+    gpu.setForeground(0xFFFFFF)
+    gpu.set(x + 1, y, title)
+    gpu.setBackground(0x3C3C3C)
+    gpu.fill(x, y + 1, width, 1, " ")
+    gpu.setBackground(0x1C1C1C)
+    gpu.fill(x, y + height - 1, width, 1, " ")
+    gpu.setForeground(0xFFFFFF)
+    gpu.set(x + 1, y + height - 1, "Закрыть")
+end
+
 -- Функция отображения страницы ошибки
 local function error_page(title, text, color)
     gpu.setBackground(color)
@@ -31,11 +45,11 @@ end
 
 -- Функция запроса подтверждения
 local function prompt(text, address)
+    drawFrame(2, 2, gpuX - 4, gpuY - 4, "Подтверждение")
     gpu.setBackground(0x000000)
-    gpu.fill(1, 1, gpuX, gpuY, " ")
-    gpu.set(1, 1, text .. " [Y/n]: ")
-    gpu.set(1, 2, "Адрес диска: " .. address)
-    
+    gpu.set(3, 4, text .. " [Y/n]: ")
+    gpu.set(3, 5, "Адрес диска: " .. address)
+
     while true do
         local _, _, _, key = computer.pullSignal("key_down")
         if key == 21 then -- Y
@@ -43,7 +57,7 @@ local function prompt(text, address)
         elseif key == 49 then -- N
             return false
         else
-            gpu.set(1, 3, "Нажмите Y для подтверждения или N для отмены")
+            gpu.set(3, 6, "Нажмите Y для подтверждения или N для отмены")
         end
     end
 end
@@ -174,4 +188,3 @@ end
 while true do
     computer.pullSignal()
 end
-
