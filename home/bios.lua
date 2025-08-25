@@ -305,13 +305,13 @@ local function main()
         
         -- Обновляем прогресс каждые 5 чанков
         if chunk_count % 5 == 0 then
-            local progress = math.min(100, math.floor(total_size / 500 * 100)) -- Увеличил ожидаемый размер
+            local progress = math.min(100, math.floor(total_size / 500 * 100))
             showMessage("Загрузка системы...", progress .. "%")
         end
     end
     handle.close()
     
-    -- Уменьшил минимальный размер проверки, так как ваш init.lua маленький
+    -- Уменьшил минимальный размер проверки
     if #content < 50 then
         showMessage("Ошибка загрузки", "Файл слишком мал или поврежден: " .. #content .. " байт")
         computer.pullSignal(3)
@@ -336,25 +336,53 @@ gpu_proxy.set(1, 1, "Полностью рабочий TemOS")
 print("TemOS успешно загружен!")]]
     end
     
+    -- Записываем init.lua
     local file, err = disk.open("init.lua", "w")
     if not file then
-        showMessage("Ошибка записи", "Не удалось создать файл: " .. tostring(err))
+        showMessage("Ошибка записи", "Не удалось создать init.lua: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
     
-    -- Записываем содержимое
     local success, err = disk.write(file, content)
     if not success then
         disk.close(file)
-        showMessage("Ошибка записи", "Не удалось записать: " .. tostring(err))
+        showMessage("Ошибка записи", "Не удалось записать init.lua: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
     
     disk.close(file)
+    
+    -- Создаем .shrc для автоматического запуска init.lua при загрузке
+    local shrc_content = [[-- Автоматический запуск TemOS при загрузке
+if fs.exists("init.lua") then
+    print("Запуск TemOS...")
+    os.execute("init.lua")
+else
+    print("Ошибка: init.lua не найден")
+end]]
+    
+    local shrc_file, err = disk.open(".shrc", "w")
+    if not shrc_file then
+        showMessage("Ошибка записи", "Не удалось создать .shrc: " .. tostring(err))
+        computer.pullSignal(3)
+        computer.shutdown()
+        return
+    end
+    
+    success, err = disk.write(shrc_file, shrc_content)
+    if not success then
+        disk.close(shrc_file)
+        showMessage("Ошибка записи", "Не удалось записать .shrc: " .. tostring(err))
+        computer.pullSignal(3)
+        computer.shutdown()
+        return
+    end
+    
+    disk.close(shrc_file)
     
     -- Установка метки
     pcall(disk.setLabel, "TemOS")
@@ -370,7 +398,10 @@ print("TemOS успешно загружен!")]]
     drawText(math.floor((screen_width - unicode.len("Компьютер будет перезагружен")) / 2), 
             math.floor(screen_height / 2), "Компьютер будет перезагружен", 0x888888)
     
-    drawProgressBar(math.floor((screen_width - 40) / 2), math.floor(screen_height / 2) + 3, 40, 2, 100, "Готово!")
+    drawText(math.floor((screen_width - unicode.len("init.lua будет запускаться автоматически")) / 2), 
+            math.floor(screen_height / 2) + 2, "init.lua будет запускаться автоматически", 0x00FF00)
+    
+    drawProgressBar(math.floor((screen_width - 40) / 2), math.floor(screen_height / 2) + 5, 40, 2, 100, "Готово!")
     
     computer.pullSignal(3)
     computer.shutdown(true)
