@@ -15,9 +15,9 @@ local gpu = cp(component_gpu);
 gpu.bind(component_screen);
 local gpuX, gpuY = gpu.maxResolution();
 
-GPU max resolution:
-error("alo uebok GPU postav'")
-tostring(gpuX) .. "x" .. tostring(gpuY)
+-- GPU max resolution:
+error("Ti loh")
+-- .. tostring(gpuX) .. "x" .. tostring(gpuY)
 
 --[[
 local internet = component.list("internet")();
