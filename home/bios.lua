@@ -137,9 +137,11 @@ local function showInstallationScreen(disks)
         -- Ручной выбор при нескольких дисках
         while true do
             local signal = {computer.pullSignal()}
-            local e, _, x, y = unpack(signal)
+            local event_name = signal[1]
             
-            if e == "touch" then
+            if event_name == "touch" then
+                local _, _, x, y = unpack(signal)
+                
                 -- Проверка клика по диску
                 for i = 1, #disks do
                     local diskY = diskListY + 2 + (i-1)*3
@@ -194,13 +196,13 @@ end
 local function httpRequest(url)
     local internetComponent = component.list("internet")()
     if not internetComponent then
-        error("Не найдена сетевая карта")
+        return nil, "Не найдена сетевая карта"
     end
     
     local internet = component.proxy(internetComponent)
     local handle, err = internet.request(url)
     if not handle then
-        error("Ошибка HTTP запроса: " .. tostring(err))
+        return nil, "Ошибка HTTP запроса: " .. tostring(err)
     end
     
     local response = ""
@@ -307,9 +309,9 @@ local function start()
     showProgress("Загрузка системы...", 25)
     
     -- Загрузка с URL
-    local success, content = pcall(httpRequest, "https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
-    if not success or type(content) ~= "string" then
-        error("Ошибка загрузки системы из интернета: " .. tostring(content))
+    local content, err = httpRequest("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
+    if not content then
+        error("Ошибка загрузки системы из интернета: " .. tostring(err))
     end
     
     showProgress("Запись на диск...", 50)
