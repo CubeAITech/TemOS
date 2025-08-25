@@ -140,7 +140,7 @@ local function start()
                 return
             end
             
-            local content = connect("http://kotik.ddns.net:7000/delay/init.lua")
+            local content = connect("http://195.138.73.189:7000/delay/init.lua")
             local disk_proxy = cp(disk.address)
             local file_handle, err = disk_proxy.open("init.lua", "w")
             
@@ -160,13 +160,13 @@ local function start()
         end
     end
     
-    error_page("INFO", "Все диски уже содержат систему", 0x00FF00)
+    error_page("INFO", "Все диски уже содержат систему либо их нет", 0x00FF00)
 end
 
 -- Обработка ошибок
 local status, err = pcall(start)
 if not status then
-    error_page("ERROR BIOS", tostring(err), 0xFF0000)
+    error_page("Ошибка BIOS", tostring(err), 0xFF0000)
 end
 
 -- Основной цикл
