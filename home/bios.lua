@@ -1,6 +1,7 @@
 local unicode = unicode or utf8
 local component = component
 local computer = computer
+local event = require("event")
 local invoke = component.invoke
 local cp = component.proxy
 local cl = component.list
@@ -19,45 +20,143 @@ end
 -- Настройка GPU
 local gpu = cp(component_gpu)
 gpu.bind(component_screen)
-local gpuX, gpuY = gpu.maxResolution()
+local screen_width, screen_height = gpu.maxResolution()
 
--- Функция отображения рамки
-local function drawFrame(x, y, width, height, title)
-    gpu.setBackground(0x1C1C1C)
+-- Цветовая схема
+local colors = {
+    background = 0x1E1E1E,
+    header_bg = 0x2D2D2D,
+    text = 0xFFFFFF,
+    accent = 0x0078D7,
+    button = 0x0078D7,
+    button_hover = 0x106EBE,
+    button_text = 0xFFFFFF,
+    disk_normal = 0x3C3C3C,
+    disk_selected = 0x0078D7,
+    disk_text = 0xFFFFFF
+}
+
+-- Очистка экрана
+local function clearScreen()
+    gpu.setBackground(colors.background)
+    gpu.fill(1, 1, screen_width, screen_height, " ")
+end
+
+-- Рисование прямоугольника с текстом
+local function drawBox(x, y, width, height, bgColor, text, textColor)
+    gpu.setBackground(bgColor)
     gpu.fill(x, y, width, height, " ")
-    gpu.setForeground(0xFFFFFF)
-    gpu.set(x + 1, y, title)
-    gpu.setBackground(0x3C3C3C)
-    gpu.fill(x, y + 1, width, 1, " ")
-    gpu.setBackground(0x1C1C1C)
-    gpu.fill(x, y + height - 1, width, 1, " ")
-    gpu.setForeground(0xFFFFFF)
-    gpu.set(x + 1, y + height - 1, "Закрыть")
+    if text then
+        gpu.setForeground(textColor or colors.text)
+        local textX = math.floor(x + (width - unicode.len(text)) / 2)
+        local textY = math.floor(y + height / 2)
+        gpu.set(textX, textY, text)
+    end
 end
 
--- Функция отображения страницы ошибки
-local function error_page(title, text, color)
-    gpu.setBackground(color)
-    gpu.fill(1, 1, gpuX, gpuY, " ")
-    gpu.set(math.floor((gpuX - unicode.len(title)) / 2), math.floor(gpuY / 2), title)
-    gpu.set(math.floor((gpuX - unicode.len(text)) / 2), math.floor((gpuY + 2) / 2), text)
+-- Рисование кнопки
+local function drawButton(x, y, width, height, text, isHovered)
+    local bgColor = isHovered and colors.button_hover or colors.button
+    drawBox(x, y, width, height, bgColor, text, colors.button_text)
 end
 
--- Функция запроса подтверждения
-local function prompt(text, address)
-    drawFrame(2, 2, gpuX - 4, gpuY - 4, "Подтверждение")
-    gpu.setBackground(0x000000)
-    gpu.set(3, 4, text .. " [Y/n]: ")
-    gpu.set(3, 5, "Адрес диска: " .. address)
+-- Рисование элемента диска
+local function drawDiskItem(x, y, width, disk, isSelected, index)
+    local bgColor = isSelected and colors.disk_selected or colors.disk_normal
+    local text = disk.label .. " (" .. disk.address:sub(1, 8) .. ")"
+    if disk.has_init then
+        text = text .. " [Установлено]"
+    end
+    drawBox(x, y, width, 3, bgColor, text, colors.disk_text)
+end
 
-    while true do
-        local _, _, _, key = computer.pullSignal("key_down")
-        if key == 21 then -- Y
-            return true
-        elseif key == 49 then -- N
-            return false
-        else
-            gpu.set(3, 6, "Нажмите Y для подтверждения или N для отмены")
+-- Основной интерфейс установки
+local function showInstallationScreen(disks)
+    clearScreen()
+    
+    -- Заголовок
+    drawBox(1, 1, screen_width, 3, colors.header_bg, "TemOS - Установка операционной системы", colors.text)
+    
+    -- Информация о системе
+    local infoText = "Добро пожаловать в установку TemOS v1.0"
+    gpu.setForeground(colors.text)
+    gpu.set(math.floor((screen_width - unicode.len(infoText)) / 2), 5, infoText)
+    
+    -- Список дисков
+    local diskListWidth = math.min(40, screen_width - 10)
+    local diskListX = math.floor((screen_width - diskListWidth) / 2)
+    local diskListY = 7
+    
+    gpu.setForeground(colors.text)
+    gpu.set(diskListX, diskListY, "Выберите диск для установки:")
+    
+    -- Автоматический выбор если только один диск
+    local selectedDisk = #disks == 1 and 1 or nil
+    
+    -- Отрисовка списка дисков
+    for i, disk in ipairs(disks) do
+        drawDiskItem(diskListX, diskListY + 2 + (i-1)*3, diskListWidth, disk, selectedDisk == i, i)
+    end
+    
+    -- Кнопка установки
+    local buttonWidth = 20
+    local buttonX = math.floor((screen_width - buttonWidth) / 2)
+    local buttonY = diskListY + 2 + #disks * 3 + 2
+    
+    drawButton(buttonX, buttonY, buttonWidth, 3, "УСТАНОВИТЬ", false)
+    
+    -- Обработка событий
+    if #disks == 1 then
+        -- Автоматическая установка при одном диске
+        os.sleep(2)
+        return disks[1]
+    else
+        -- Ручной выбор при нескольких дисках
+        while true do
+            local e, _, x, y = event.pull("touch")
+            if e == "touch" then
+                -- Проверка клика по диску
+                for i = 1, #disks do
+                    local diskY = diskListY + 2 + (i-1)*3
+                    if y >= diskY and y < diskY + 3 and x >= diskListX and x < diskListX + diskListWidth then
+                        selectedDisk = i
+                        -- Перерисовка с новым выбором
+                        for j = 1, #disks do
+                            drawDiskItem(diskListX, diskListY + 2 + (j-1)*3, diskListWidth, disks[j], selectedDisk == j, j)
+                        end
+                        break
+                    end
+                end
+                
+                -- Проверка клика по кнопке
+                if selectedDisk and y >= buttonY and y < buttonY + 3 and x >= buttonX and x < buttonX + buttonWidth then
+                    return disks[selectedDisk]
+                end
+            end
+        end
+    end
+end
+
+-- Функция отображения прогресса
+local function showProgress(message, progress)
+    clearScreen()
+    drawBox(1, 1, screen_width, 3, colors.header_bg, "TemOS - Установка", colors.text)
+    
+    gpu.setForeground(colors.text)
+    gpu.set(math.floor((screen_width - unicode.len(message)) / 2), math.floor(screen_height/2) - 1, message)
+    
+    if progress then
+        local barWidth = math.min(40, screen_width - 10)
+        local barX = math.floor((screen_width - barWidth) / 2)
+        local barY = math.floor(screen_height/2) + 1
+        
+        -- Фон прогрессбара
+        drawBox(barX, barY, barWidth, 3, colors.disk_normal, nil, nil)
+        
+        -- Заполненная часть
+        local fillWidth = math.floor(barWidth * progress / 100)
+        if fillWidth > 0 then
+            drawBox(barX, barY, fillWidth, 3, colors.accent, math.floor(progress) .. "%", colors.button_text)
         end
     end
 end
@@ -107,20 +206,24 @@ local function start()
             
             table.insert(disks, {
                 address = address,
-                label = fs_proxy.getLabel(),
-                has_init = has_init
+                label = fs_proxy.getLabel() or "Без названия",
+                has_init = has_init,
+                proxy = fs_proxy
             })
         end
     end
     
     if #disks == 0 then
-        error_page("WARN BIOS", "Для установки системы требуется диск", 0xC8C800)
+        showProgress("Ошибка: Для установки системы требуется диск", 0)
+        os.sleep(3)
+        computer.shutdown()
         return
     end
     
     -- Проверка существующей системы
     for _, disk in ipairs(disks) do
         if disk.label == "delay" and disk.has_init then
+            -- Загрузка существующей системы
             local disk_proxy = cp(disk.address)
             local file_handle = disk_proxy.open("init.lua", "r")
             local content = ""
@@ -145,46 +248,50 @@ local function start()
         end
     end
     
-    -- Установка новой системы
-    for _, disk in ipairs(disks) do
-        if not disk.has_init then
-            local confirmed = prompt("Использовать этот диск для установки системы?", disk.address)
-            if not confirmed then
-                computer.shutdown()
-                return
-            end
-            
-            -- Загрузка с нового URL
-            local content = connect("https://raw.githubusercontent.com/CubeAITech/TemOS/refs/heads/main/home/init.lua")
-            local disk_proxy = cp(disk.address)
-            local file_handle, err = disk_proxy.open("init.lua", "w")
-            
-            if not file_handle then
-                error("Ошибка создания файла: " .. tostring(err))
-            end
-            
-            local success, err = disk_proxy.write(file_handle, content)
-            if not success then
-                error("Ошибка записи: " .. tostring(err))
-            end
-            
-            disk_proxy.close(file_handle)
-            disk_proxy.setLabel("delay")
-            computer.shutdown(true)
-            break
-        end
+    -- Показать интерфейс установки
+    local selectedDisk = showInstallationScreen(disks)
+    
+    if not selectedDisk then
+        computer.shutdown()
+        return
     end
     
-    error_page("INFO", "Все диски уже содержат систему", 0x00FF00)
+    -- Процесс установки
+    showProgress("Загрузка системы...", 25)
+    
+    -- Загрузка с URL
+    local content = connect("https://raw.githubusercontent.com/CubeAITech/TemOS/refs/heads/main/home/init.lua")
+    
+    showProgress("Запись на диск...", 50)
+    
+    local disk_proxy = selectedDisk.proxy
+    local file_handle, err = disk_proxy.open("init.lua", "w")
+    
+    if not file_handle then
+        error("Ошибка создания файла: " .. tostring(err))
+    end
+    
+    local success, err = disk_proxy.write(file_handle, content)
+    if not success then
+        error("Ошибка записи: " .. tostring(err))
+    end
+    
+    disk_proxy.close(file_handle)
+    disk_proxy.setLabel("delay")
+    
+    showProgress("Установка завершена!", 100)
+    os.sleep(2)
+    
+    computer.shutdown(true)
 end
 
 -- Обработка ошибок
 local status, err = pcall(start)
 if not status then
-    error_page("ERROR BIOS", tostring(err), 0xFF0000)
-end
-
--- Основной цикл
-while true do
-    computer.pullSignal()
+    clearScreen()
+    drawBox(1, 1, screen_width, 3, 0xFF0000, "Ошибка BIOS", 0xFFFFFF)
+    gpu.setForeground(0xFFFFFF)
+    gpu.set(math.floor((screen_width - unicode.len(tostring(err))) / 2), math.floor(screen_height/2), tostring(err))
+    os.sleep(5)
+    computer.shutdown()
 end
