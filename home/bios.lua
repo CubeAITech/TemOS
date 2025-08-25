@@ -45,7 +45,8 @@ local colors = {
     button_text = 0xFFFFFF,
     disk_normal = 0x3C3C3C,
     disk_selected = 0x0078D7,
-    disk_text = 0xFFFFFF
+    disk_text = 0xFFFFFF,
+    error = 0xFF0000
 }
 
 -- Очистка экрана
@@ -111,8 +112,7 @@ local function showInstallationScreen(disks)
     gpu.setForeground(colors.text)
     gpu.set(diskListX, diskListY, "Выберите диск для установки:")
     
-    -- Автоматический выбор если только один диск
-    local selectedDisk = #disks == 1 and 1 or nil
+    local selectedDisk = nil
     
     -- Отрисовка списка дисков
     for i, disk in ipairs(disks) do
@@ -124,45 +124,46 @@ local function showInstallationScreen(disks)
     local buttonX = math.floor((screen_width - buttonWidth) / 2)
     local buttonY = diskListY + 2 + #disks * 3 + 2
     
-    if selectedDisk then
-        drawButton(buttonX, buttonY, buttonWidth, 3, "УСТАНОВИТЬ", false)
-    end
+    -- Кнопка отмены
+    local cancelButtonWidth = 20
+    local cancelButtonX = math.floor((screen_width - cancelButtonWidth) / 2)
+    local cancelButtonY = buttonY + 4
     
-    -- Обработка событий
-    if #disks == 1 then
-        -- Автоматическая установка при одном диске
-        wait(2)
-        return disks[1]
-    else
-        -- Ручной выбор при нескольких дисках
-        while true do
-            local signal = {computer.pullSignal()}
-            local event_name = signal[1]
+    drawButton(cancelButtonX, cancelButtonY, cancelButtonWidth, 3, "ОТМЕНА", false)
+    
+    -- Ручной выбор диска
+    while true do
+        local signal = {computer.pullSignal()}
+        local event_name = signal[1]
+        
+        if event_name == "touch" then
+            local _, _, x, y = unpack(signal)
             
-            if event_name == "touch" then
-                local _, _, x, y = unpack(signal)
-                
-                -- Проверка клика по диску
-                for i = 1, #disks do
-                    local diskY = diskListY + 2 + (i-1)*3
-                    if y >= diskY and y < diskY + 3 and x >= diskListX and x < diskListX + diskListWidth then
-                        selectedDisk = i
-                        -- Перерисовка с новым выбором
-                        for j = 1, #disks do
-                            drawDiskItem(diskListX, diskListY + 2 + (j-1)*3, diskListWidth, disks[j], selectedDisk == j, j)
-                        end
-                        -- Перерисовка кнопки
-                        if selectedDisk then
-                            drawButton(buttonX, buttonY, buttonWidth, 3, "УСТАНОВИТЬ", false)
-                        end
-                        break
+            -- Проверка клика по диску
+            for i = 1, #disks do
+                local diskY = diskListY + 2 + (i-1)*3
+                if y >= diskY and y < diskY + 3 and x >= diskListX and x < diskListX + diskListWidth then
+                    selectedDisk = i
+                    -- Перерисовка с новым выбором
+                    for j = 1, #disks do
+                        drawDiskItem(diskListX, diskListY + 2 + (j-1)*3, diskListWidth, disks[j], selectedDisk == j, j)
                     end
+                    -- Перерисовка кнопки установки
+                    if selectedDisk then
+                        drawButton(buttonX, buttonY, buttonWidth, 3, "УСТАНОВИТЬ", false)
+                    end
+                    break
                 end
-                
-                -- Проверка клика по кнопке
-                if selectedDisk and y >= buttonY and y < buttonY + 3 and x >= buttonX and x < buttonX + buttonWidth then
-                    return disks[selectedDisk]
-                end
+            end
+            
+            -- Проверка клика по кнопке установки
+            if selectedDisk and y >= buttonY and y < buttonY + 3 and x >= buttonX and x < buttonX + buttonWidth then
+                return disks[selectedDisk]
+            end
+            
+            -- Проверка клика по кнопке отмены
+            if y >= cancelButtonY and y < cancelButtonY + 3 and x >= cancelButtonX and x < cancelButtonX + cancelButtonWidth then
+                return nil
             end
         end
     end
@@ -192,6 +193,41 @@ local function showProgress(message, progress)
     end
 end
 
+-- Функция отображения ошибки
+local function showError(message)
+    clearScreen()
+    drawBox(1, 1, screen_width, 3, colors.error, "ОШИБКА УСТАНОВКИ", colors.text)
+    
+    gpu.setForeground(colors.text)
+    
+    -- Разбиваем сообщение на строки
+    local lines = {}
+    local currentLine = ""
+    
+    for word in message:gmatch("%S+") do
+        if unicode.len(currentLine) + unicode.len(word) + 1 > screen_width then
+            table.insert(lines, currentLine)
+            currentLine = word
+        else
+            if currentLine ~= "" then
+                currentLine = currentLine .. " " .. word
+            else
+                currentLine = word
+            end
+        end
+    end
+    table.insert(lines, currentLine)
+    
+    -- Выводим строки по центру
+    local startY = math.floor(screen_height/2) - math.floor(#lines/2)
+    for i, line in ipairs(lines) do
+        gpu.set(math.floor((screen_width - unicode.len(line)) / 2), startY + i - 1, line)
+    end
+    
+    gpu.set(math.floor((screen_width - 30) / 2), screen_height - 2, "Компьютер будет выключен через 5 сек...")
+    wait(5)
+end
+
 -- Функция HTTP запроса
 local function httpRequest(url)
     local internetComponent = component.list("internet")()
@@ -207,11 +243,15 @@ local function httpRequest(url)
     
     local response = ""
     while true do
-        local chunk = handle.read()
-        if not chunk then
+        local chunk, readErr = handle.read()
+        if chunk then
+            response = response .. chunk
+        elseif readErr then
+            handle.close()
+            return nil, "Ошибка чтения: " .. tostring(readErr)
+        else
             break
         end
-        response = response .. chunk
     end
     
     handle.close()
@@ -253,48 +293,9 @@ local function start()
     end
     
     if #disks == 0 then
-        showProgress("Ошибка: Для установки системы требуется диск", 0)
-        wait(3)
+        showError("Не найдено подходящих дисков для установки.\nТребуется диск с возможностью записи.")
         computer.shutdown()
         return
-    end
-    
-    -- Проверка существующей системы
-    for _, disk in ipairs(disks) do
-        if disk.label == "delay" and disk.has_init then
-            -- Загрузка существующей системы
-            showProgress("Загрузка существующей системы...", 0)
-            wait(1)
-            
-            -- Запускаем init.lua напрямую через component
-            local success, result = pcall(function()
-                local handle = disk.proxy.open("init.lua", "r")
-                if not handle then
-                    error("Не удалось открыть init.lua")
-                end
-                
-                local content = ""
-                while true do
-                    local chunk = disk.proxy.read(handle, math.huge)
-                    if not chunk then break end
-                    content = content .. chunk
-                end
-                disk.proxy.close(handle)
-                
-                -- Выполняем код
-                local func, err = load(content, "=init.lua")
-                if not func then
-                    error("Ошибка компиляции: " .. tostring(err))
-                end
-                
-                func()
-            end)
-            
-            if not success then
-                error("Ошибка загрузки системы: " .. tostring(result))
-            end
-            return
-        end
     end
     
     -- Показать интерфейс установки
@@ -311,7 +312,9 @@ local function start()
     -- Загрузка с URL
     local content, err = httpRequest("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
     if not content then
-        error("Ошибка загрузки системы из интернета: " .. tostring(err))
+        showError("Ошибка загрузки системы из интернета:\n" .. tostring(err))
+        computer.shutdown()
+        return
     end
     
     showProgress("Запись на диск...", 50)
@@ -321,13 +324,17 @@ local function start()
     -- Создаем файл init.lua
     local file_handle, err = disk_proxy.open("init.lua", "w")
     if not file_handle then
-        error("Ошибка создания файла: " .. tostring(err))
+        showError("Ошибка создания файла init.lua:\n" .. tostring(err))
+        computer.shutdown()
+        return
     end
     
     local success, err = disk_proxy.write(file_handle, content)
     if not success then
         disk_proxy.close(file_handle)
-        error("Ошибка записи: " .. tostring(err))
+        showError("Ошибка записи на диск:\n" .. tostring(err))
+        computer.shutdown()
+        return
     end
     
     disk_proxy.close(file_handle)
@@ -335,36 +342,20 @@ local function start()
     -- Устанавливаем метку диска
     local success, err = pcall(disk_proxy.setLabel, "delay")
     if not success then
-        showProgress("Предупреждение: Не удалось установить метку диска", 75)
+        showProgress("Предупреждение: Не удалось установить метку", 75)
         wait(2)
     end
     
-    showProgress("Установка завершена!", 100)
+    showProgress("Установка завершена успешно!", 100)
     wait(2)
     
     computer.shutdown(true)
 end
 
--- Обработка ошибок
+-- Главный код
+clearScreen()
 local status, err = pcall(start)
 if not status then
-    -- Безопасная очистка экрана
-    pcall(function()
-        gpu.setBackground(0x000000)
-        gpu.fill(1, 1, screen_width, screen_height, " ")
-        gpu.setForeground(0xFFFFFF)
-        
-        gpu.set(math.floor((screen_width - 10) / 2), 2, "Ошибка BIOS")
-        
-        -- Вывод ошибки
-        local errorMsg = tostring(err)
-        local y = math.floor(screen_height/2)
-        if unicode.len(errorMsg) > screen_width then
-            -- Обрезаем слишком длинные сообщения
-            errorMsg = unicode.sub(errorMsg, 1, screen_width - 3) .. "..."
-        end
-        gpu.set(math.floor((screen_width - unicode.len(errorMsg)) / 2), y, errorMsg)
-    end)
-    wait(5)
-    computer.shutdown()
+    showError("Критическая ошибка:\n" .. tostring(err))
 end
+computer.shutdown()
