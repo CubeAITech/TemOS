@@ -1,14 +1,24 @@
-local unicode = unicode or utf8
+local unicode = unicode or require("unicode") or utf8
 local component = component
 local computer = computer
 local event = require("event")
-local invoke = component.invoke
-local cp = component.proxy
-local cl = component.list
+local filesystem = require("filesystem")
+local shell = require("shell")
 
 -- Инициализация компонентов
-local component_screen = cl("screen")()
-local component_gpu = cl("gpu")()
+local component_screen
+local component_gpu
+
+-- Поиск основных компонентов
+for address, type in component.list("screen") do
+    component_screen = address
+    break
+end
+
+for address, type in component.list("gpu") do
+    component_gpu = address
+    break
+end
 
 -- Проверка наличия обязательных компонентов
 if not component_screen then
@@ -18,9 +28,14 @@ elseif not component_gpu then
 end
 
 -- Настройка GPU
-local gpu = cp(component_gpu)
-gpu.bind(component_screen)
-local screen_width, screen_height = gpu.maxResolution()
+local gpu = component.proxy(component_gpu)
+local screen_connected, reason = gpu.bind(component_screen)
+if not screen_connected then
+    error("Не удалось подключить GPU к экрану: " .. tostring(reason))
+end
+
+gpu.setResolution(gpu.maxResolution())
+local screen_width, screen_height = gpu.getResolution()
 
 -- Цветовая схема
 local colors = {
@@ -39,6 +54,7 @@ local colors = {
 -- Очистка экрана
 local function clearScreen()
     gpu.setBackground(colors.background)
+    gpu.setForeground(colors.text)
     gpu.fill(1, 1, screen_width, screen_height, " ")
 end
 
@@ -98,12 +114,14 @@ local function showInstallationScreen(disks)
         drawDiskItem(diskListX, diskListY + 2 + (i-1)*3, diskListWidth, disk, selectedDisk == i, i)
     end
     
-    -- Кнопка установки
+    -- Кнопка установки (только если выбран диск)
     local buttonWidth = 20
     local buttonX = math.floor((screen_width - buttonWidth) / 2)
     local buttonY = diskListY + 2 + #disks * 3 + 2
     
-    drawButton(buttonX, buttonY, buttonWidth, 3, "УСТАНОВИТЬ", false)
+    if selectedDisk then
+        drawButton(buttonX, buttonY, buttonWidth, 3, "УСТАНОВИТЬ", false)
+    end
     
     -- Обработка событий
     if #disks == 1 then
@@ -123,6 +141,10 @@ local function showInstallationScreen(disks)
                         -- Перерисовка с новым выбором
                         for j = 1, #disks do
                             drawDiskItem(diskListX, diskListY + 2 + (j-1)*3, diskListWidth, disks[j], selectedDisk == j, j)
+                        end
+                        -- Перерисовка кнопки
+                        if selectedDisk then
+                            drawButton(buttonX, buttonY, buttonWidth, 3, "УСТАНОВИТЬ", false)
                         end
                         break
                     end
@@ -162,30 +184,30 @@ local function showProgress(message, progress)
 end
 
 -- Функция HTTP запроса
-local function connect(url)
-    local internet = cl("internet")()
-    if not internet then
+local function httpRequest(url)
+    local internetComponent = component.list("internet")()
+    if not internetComponent then
         error("Не найдена сетевая карта")
     end
     
-    local internet_proxy = cp(internet)
-    local request, err = internet_proxy.request(url)
-    
-    if not request then
-        error("Ошибка запроса: " .. tostring(err))
+    local internet = component.proxy(internetComponent)
+    local success, handle = pcall(internet.request, url)
+    if not success or not handle then
+        error("Ошибка HTTP запроса: " .. tostring(handle))
     end
     
     local response = ""
     while true do
-        local chunk, err = request.read()
-        if not chunk then
-            if err then
-                error("Ошибка чтения: " .. tostring(err))
-            else
-                break
-            end
+        local chunk, err = handle.read()
+        if chunk then
+            response = response .. chunk
+        elseif err then
+            handle.close()
+            error("Ошибка чтения: " .. tostring(err))
+        else
+            handle.close()
+            break
         end
-        response = response .. chunk
     end
     
     return response
@@ -193,23 +215,25 @@ end
 
 -- Основная функция запуска
 local function start()
-    local filesystems = cl("filesystem")
     local disks = {}
     
     -- Поиск доступных дисков
-    for address in filesystems do
-        local fs_proxy = cp(address)
-        if fs_proxy.getLabel() ~= "tmpfs" then
-            local file_handle = fs_proxy.open("init.lua", "r")
-            local has_init = file_handle ~= nil
-            if file_handle then fs_proxy.close(file_handle) end
+    for address, type in component.list("filesystem") do
+        if type == "filesystem" then
+            local fs_proxy = component.proxy(address)
+            local label = fs_proxy.getLabel() or "Без названия"
             
-            table.insert(disks, {
-                address = address,
-                label = fs_proxy.getLabel() or "Без названия",
-                has_init = has_init,
-                proxy = fs_proxy
-            })
+            -- Пропускаем tmpfs и read-only файловые системы
+            if label ~= "tmpfs" and not fs_proxy.isReadOnly() then
+                local has_init = fs_proxy.exists("init.lua")
+                
+                table.insert(disks, {
+                    address = address,
+                    label = label,
+                    has_init = has_init,
+                    proxy = fs_proxy
+                })
+            end
         end
     end
     
@@ -224,25 +248,19 @@ local function start()
     for _, disk in ipairs(disks) do
         if disk.label == "delay" and disk.has_init then
             -- Загрузка существующей системы
-            local disk_proxy = cp(disk.address)
-            local file_handle = disk_proxy.open("init.lua", "r")
-            local content = ""
+            showProgress("Загрузка существующей системы...", 0)
+            os.sleep(1)
             
-            while true do
-                local chunk = disk_proxy.read(file_handle, math.huge)
-                if not chunk then break end
-                content = content .. chunk
-            end
-            disk_proxy.close(file_handle)
+            -- Монтируем диск как основную файловую систему
+            filesystem.mount(disk.proxy, "/")
             
-            local code, err = load(content, "=init.lua", "t", _G)
-            if not code then
-                error("Ошибка загрузки кода: " .. tostring(err))
-            end
+            -- Запускаем init.lua
+            local success, result = pcall(function()
+                os.execute("/init.lua")
+            end)
             
-            local success, result = pcall(code)
             if not success then
-                error("Ошибка выполнения: " .. tostring(result))
+                error("Ошибка загрузки системы: " .. tostring(result))
             end
             return
         end
@@ -260,24 +278,32 @@ local function start()
     showProgress("Загрузка системы...", 25)
     
     -- Загрузка с URL
-    local content = connect("https://raw.githubusercontent.com/CubeAITech/TemOS/refs/heads/main/home/init.lua")
+    local content = httpRequest("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
     
     showProgress("Запись на диск...", 50)
     
     local disk_proxy = selectedDisk.proxy
-    local file_handle, err = disk_proxy.open("init.lua", "w")
     
+    -- Создаем файл init.lua
+    local file_handle, err = disk_proxy.open("init.lua", "w")
     if not file_handle then
         error("Ошибка создания файла: " .. tostring(err))
     end
     
     local success, err = disk_proxy.write(file_handle, content)
     if not success then
+        disk_proxy.close(file_handle)
         error("Ошибка записи: " .. tostring(err))
     end
     
     disk_proxy.close(file_handle)
-    disk_proxy.setLabel("delay")
+    
+    -- Устанавливаем метку диска
+    local success, err = pcall(disk_proxy.setLabel, "delay")
+    if not success then
+        showProgress("Предупреждение: Не удалось установить метку диска", 75)
+        os.sleep(2)
+    end
     
     showProgress("Установка завершена!", 100)
     os.sleep(2)
@@ -288,10 +314,35 @@ end
 -- Обработка ошибок
 local status, err = pcall(start)
 if not status then
-    clearScreen()
-    drawBox(1, 1, screen_width, 3, 0xFF0000, "Ошибка BIOS", 0xFFFFFF)
-    gpu.setForeground(0xFFFFFF)
-    gpu.set(math.floor((screen_width - unicode.len(tostring(err))) / 2), math.floor(screen_height/2), tostring(err))
+    pcall(clearScreen)
+    pcall(function()
+        gpu.setBackground(0xFF0000)
+        gpu.fill(1, 1, screen_width, 3, " ")
+        gpu.setForeground(0xFFFFFF)
+        gpu.set(math.floor((screen_width - 10) / 2), 2, "Ошибка BIOS")
+        
+        gpu.setForeground(0xFFFFFF)
+        gpu.setBackground(colors.background)
+        
+        -- Вывод ошибки с переносами
+        local errorMsg = tostring(err)
+        local y = math.floor(screen_height/2) - 2
+        for line in errorMsg:gmatch("[^\n]+") do
+            if unicode.len(line) > screen_width then
+                -- Разбиваем длинные строки
+                for i = 1, math.ceil(unicode.len(line) / screen_width) do
+                    local startPos = (i-1) * screen_width + 1
+                    local endPos = math.min(i * screen_width, unicode.len(line))
+                    local subLine = unicode.sub(line, startPos, endPos)
+                    gpu.set(1, y, subLine)
+                    y = y + 1
+                end
+            else
+                gpu.set(math.floor((screen_width - unicode.len(line)) / 2), y, line)
+                y = y + 1
+            end
+        end
+    end)
     os.sleep(5)
     computer.shutdown()
 end
