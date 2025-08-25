@@ -1,9 +1,21 @@
-local unicode = unicode or require("unicode") or utf8
+local unicode = unicode or utf8
 local component = component
 local computer = computer
-local event = require("event")
-local filesystem = require("filesystem")
-local shell = require("shell")
+
+-- Проверяем доступность event и загружаем его правильно
+local event
+if _G.event then
+    event = _G.event
+else
+    -- Пытаемся загрузить через component
+    for address, type in component.list("event") do
+        event = component.proxy(address)
+        break
+    end
+    if not event then
+        error("Не найден компонент event")
+    end
+end
 
 -- Инициализация компонентов
 local component_screen
@@ -126,7 +138,7 @@ local function showInstallationScreen(disks)
     -- Обработка событий
     if #disks == 1 then
         -- Автоматическая установка при одном диске
-        os.sleep(2)
+        computer.pullSignal(2)
         return disks[1]
     else
         -- Ручной выбор при нескольких дисках
@@ -191,26 +203,32 @@ local function httpRequest(url)
     end
     
     local internet = component.proxy(internetComponent)
-    local success, handle = pcall(internet.request, url)
-    if not success or not handle then
-        error("Ошибка HTTP запроса: " .. tostring(handle))
+    local handle, err = internet.request(url)
+    if not handle then
+        error("Ошибка HTTP запроса: " .. tostring(err))
     end
     
     local response = ""
     while true do
-        local chunk, err = handle.read()
-        if chunk then
-            response = response .. chunk
-        elseif err then
-            handle.close()
-            error("Ошибка чтения: " .. tostring(err))
-        else
-            handle.close()
+        local chunk = handle.read()
+        if not chunk then
             break
         end
+        response = response .. chunk
     end
     
+    handle.close()
     return response
+end
+
+-- Проверка существования файла
+local function fileExists(fs_proxy, path)
+    local handle = fs_proxy.open(path, "r")
+    if handle then
+        fs_proxy.close(handle)
+        return true
+    end
+    return false
 end
 
 -- Основная функция запуска
@@ -225,7 +243,7 @@ local function start()
             
             -- Пропускаем tmpfs и read-only файловые системы
             if label ~= "tmpfs" and not fs_proxy.isReadOnly() then
-                local has_init = fs_proxy.exists("init.lua")
+                local has_init = fileExists(fs_proxy, "init.lua")
                 
                 table.insert(disks, {
                     address = address,
@@ -239,7 +257,7 @@ local function start()
     
     if #disks == 0 then
         showProgress("Ошибка: Для установки системы требуется диск", 0)
-        os.sleep(3)
+        computer.pullSignal(3)
         computer.shutdown()
         return
     end
@@ -249,14 +267,30 @@ local function start()
         if disk.label == "delay" and disk.has_init then
             -- Загрузка существующей системы
             showProgress("Загрузка существующей системы...", 0)
-            os.sleep(1)
+            computer.pullSignal(1)
             
-            -- Монтируем диск как основную файловую систему
-            filesystem.mount(disk.proxy, "/")
-            
-            -- Запускаем init.lua
+            -- Запускаем init.lua напрямую через component
             local success, result = pcall(function()
-                os.execute("/init.lua")
+                local handle = disk.proxy.open("init.lua", "r")
+                if not handle then
+                    error("Не удалось открыть init.lua")
+                end
+                
+                local content = ""
+                while true do
+                    local chunk = disk.proxy.read(handle, math.huge)
+                    if not chunk then break end
+                    content = content .. chunk
+                end
+                disk.proxy.close(handle)
+                
+                -- Выполняем код
+                local func, err = load(content, "=init.lua")
+                if not func then
+                    error("Ошибка компиляции: " .. tostring(err))
+                end
+                
+                func()
             end)
             
             if not success then
@@ -278,7 +312,10 @@ local function start()
     showProgress("Загрузка системы...", 25)
     
     -- Загрузка с URL
-    local content = httpRequest("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
+    local content, err = pcall(httpRequest, "https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
+    if not content or type(content) ~= "string" then
+        error("Ошибка загрузки системы из интернета: " .. tostring(err))
+    end
     
     showProgress("Запись на диск...", 50)
     
@@ -302,11 +339,11 @@ local function start()
     local success, err = pcall(disk_proxy.setLabel, "delay")
     if not success then
         showProgress("Предупреждение: Не удалось установить метку диска", 75)
-        os.sleep(2)
+        computer.pullSignal(2)
     end
     
     showProgress("Установка завершена!", 100)
-    os.sleep(2)
+    computer.pullSignal(2)
     
     computer.shutdown(true)
 end
@@ -314,35 +351,19 @@ end
 -- Обработка ошибок
 local status, err = pcall(start)
 if not status then
-    pcall(clearScreen)
+    -- Безопасная очистка экрана
     pcall(function()
-        gpu.setBackground(0xFF0000)
-        gpu.fill(1, 1, screen_width, 3, " ")
+        gpu.setBackground(0x000000)
+        gpu.fill(1, 1, screen_width, screen_height, " ")
         gpu.setForeground(0xFFFFFF)
+        
         gpu.set(math.floor((screen_width - 10) / 2), 2, "Ошибка BIOS")
         
-        gpu.setForeground(0xFFFFFF)
-        gpu.setBackground(colors.background)
-        
-        -- Вывод ошибки с переносами
+        -- Вывод ошибки
         local errorMsg = tostring(err)
-        local y = math.floor(screen_height/2) - 2
-        for line in errorMsg:gmatch("[^\n]+") do
-            if unicode.len(line) > screen_width then
-                -- Разбиваем длинные строки
-                for i = 1, math.ceil(unicode.len(line) / screen_width) do
-                    local startPos = (i-1) * screen_width + 1
-                    local endPos = math.min(i * screen_width, unicode.len(line))
-                    local subLine = unicode.sub(line, startPos, endPos)
-                    gpu.set(1, y, subLine)
-                    y = y + 1
-                end
-            else
-                gpu.set(math.floor((screen_width - unicode.len(line)) / 2), y, line)
-                y = y + 1
-            end
-        end
+        local y = math.floor(screen_height/2)
+        gpu.set(math.floor((screen_width - unicode.len(errorMsg)) / 2), y, errorMsg)
     end)
-    os.sleep(5)
+    computer.pullSignal(5)
     computer.shutdown()
 end
