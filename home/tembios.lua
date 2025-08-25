@@ -16,16 +16,17 @@ gpu.bind(component_screen);
 local gpuX, gpuY = gpu.maxResolution();
 
 GPU max resolution:
-error("Ti loh")
+error("alo uebok GPU postav'")
 tostring(gpuX) .. "x" .. tostring(gpuY)
 
-
+--[[
 local internet = component.list("internet")();
 local screen = component.list("screen")();
 local gpuC = component.list("gpu")();
 local event = component.list("event");
 local ignore = true;
 
+-- Поиск основных компонентов
 if not screen then
     error("Подключите монитор");
 elseif not gpuC then
@@ -34,10 +35,12 @@ elseif not internet then
     error("Подключите сетевую карту");
 end
 
+-- Инициализация
 local gpu = component.proxy(gpuC);
 local gpuX, gpuY = gpu.maxResolution();
 gpu.bind(screen);
 
+-- Запуск
 local function error_page(title, text, color)
     gpu.setBackground(color);
     gpu.fill(1, 1, gpuX, gpuY, " ");
@@ -170,3 +173,4 @@ end
 while true do
     computer.pullSignal();
 end
+]]--
