@@ -250,8 +250,8 @@ local function installerMain()
         drawButton(button_x, buttons_y + 5, button_width, 3, "ВЫХОД", true, false)
         
         -- Футер
-        drawText(math.floor((screen_width - unicode.len("TemOS v1.0 - Новейшая операционная система")) / 2), 
-                screen_height - 1, "TemOS v1.0 - Новейшая операционная система", 0x888888)
+        drawText(math.floor((screen_width - unicode.len("TemOS")) / 2), 
+                screen_height - 1, "TemOS", 0x888888)
         
         -- Ждем ввода пользователя
         local signal = {computer.pullSignal()}
@@ -298,10 +298,10 @@ local function installerMain()
     
     -- Список файлов для загрузки
     local files_to_download = {
-        "system/boot.lua",
-        "system/core.lua",
-        "system/apps.lua",
-        "system/gui.lua"
+        "home/boot.lua",
+        "home/core.lua",
+        "home/apps.lua",
+        "home/gui.lua"
     }
     
     local base_url = "https://raw.githubusercontent.com/CubeAITech/TemOS/main/"
