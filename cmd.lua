@@ -3,6 +3,13 @@ local cursorY = 1
 local screenWidth = 80
 local screenHeight = 25
 local sys = {}
+local settings = {
+    textColor = 0xFFFFFF,      -- Белый по умолчанию
+    bgColor = 0x000000,        -- Черный по умолчанию
+    fontSize = 1,              -- Размер шрифта (1-6)
+    beepEnabled = true,        -- Звуковые эффекты
+    autoBoot = false           -- Автозагрузка ОС
+}
 
 function initialize()
     for address, type in component.list() do
@@ -19,8 +26,8 @@ function initialize()
                     sys.screen = address
                     screenWidth, screenHeight = sys.gpu.maxResolution()
                     sys.gpu.setResolution(screenWidth, screenHeight)
-                    sys.gpu.setBackground(0x000000)
-                    sys.gpu.setForeground(0xFFFFFF)
+                    sys.gpu.setBackground(settings.bgColor)
+                    sys.gpu.setForeground(settings.textColor)
                     sys.gpu.fill(1, 1, screenWidth, screenHeight, " ")
                     break
                 end
@@ -42,7 +49,82 @@ function initialize()
         end
     end
     
+    -- Загрузка сохраненных настроек
+    loadSettings()
+    
     return true
+end
+
+-- Загрузка настроек из файла
+function loadSettings()
+    if fileExists("/bios/settings.cfg") then
+        local content = loadFile("/bios/settings.cfg")
+        for line in content:gmatch("[^\r\n]+") do
+            local key, value = line:match("^([^=]+)=(.+)$")
+            if key and value then
+                key = key:trim()
+                value = value:trim()
+                
+                if key == "textColor" or key == "bgColor" then
+                    settings[key] = tonumber(value) or settings[key]
+                elseif key == "fontSize" then
+                    settings[key] = math.max(1, math.min(6, tonumber(value) or settings[key]))
+                elseif key == "beepEnabled" or key == "autoBoot" then
+                    settings[key] = (value:lower() == "true")
+                end
+            end
+        end
+        applySettings()
+    end
+end
+
+-- Сохранение настроек в файл
+function saveSettings()
+    local content = ""
+    for key, value in pairs(settings) do
+        if type(value) == "boolean" then
+            content = content .. key .. "=" .. tostring(value) .. "\n"
+        else
+            content = content .. key .. "=" .. tostring(value) .. "\n"
+        end
+    end
+    
+    -- Создаем директорию /bios если ее нет
+    for address, type in component.list() do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.makeDirectory and not fs.exists("/bios") then
+                fs.makeDirectory("/bios")
+            end
+        end
+    end
+    
+    -- Сохраняем настройки
+    for address, type in component.list() do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.open and fs.write then
+                local handle, reason = fs.open("/bios/settings.cfg", "w")
+                if handle then
+                    fs.write(handle, content)
+                    fs.close(handle)
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- Применение текущих настроек
+function applySettings()
+    if sys.gpu then
+        sys.gpu.setBackground(settings.bgColor)
+        sys.gpu.setForeground(settings.textColor)
+        if sys.gpu.setFont then
+            pcall(function() sys.gpu.setFont(settings.fontSize) end)
+        end
+    end
 end
 
 function print(text)
@@ -86,13 +168,12 @@ end
 
 -- Проверка существования файла через component.filesystem
 function fileExists(path)
-    -- Ищем любую файловую систему
     for address, type in component.list() do
         if type == "filesystem" then
             local fs = component.proxy(address)
             if fs.exists and fs.isDirectory then
                 if pcall(function() return fs.exists(path) end) then
-                    return fs.exists(path)
+                    return fs.exists(path) and not fs.isDirectory(path)
                 end
             end
         end
@@ -208,6 +289,210 @@ function showInfo()
     showDiskInfo()
 end
 
+-- Функция для отображения меню настроек
+function showSettingsMenu()
+    local currentOption = 1
+    local options = {
+        "Цвет текста: " .. string.format("#%06X", settings.textColor),
+        "Цвет фона: " .. string.format("#%06X", settings.bgColor),
+        "Размер шрифта: " .. settings.fontSize,
+        "Звуковые эффекты: " .. (settings.beepEnabled and "Вкл" or "Выкл"),
+        "Автозагрузка ОС: " .. (settings.autoBoot and "Вкл" or "Выкл"),
+        "Сохранить и выйти",
+        "Выход без сохранения"
+    }
+    
+    while true do
+        clear()
+        print("=== НАСТРОЙКИ BIOS ===")
+        newline()
+        
+        for i, option in ipairs(options) do
+            if i == currentOption then
+                print("> " .. option)
+            else
+                print("  " .. option)
+            end
+            newline()
+        end
+        
+        newline()
+        print("Используйте стрелки для навигации, Enter для выбора")
+        
+        local event = {computer.pullSignal()}
+        if event[1] == "key_down" then
+            local key = event[4]
+            
+            if key == 200 then -- Стрелка вверх
+                currentOption = currentOption > 1 and currentOption - 1 or #options
+                if settings.beepEnabled and sys.beep then
+                    sys.beep.beep(800, 0.05)
+                end
+                
+            elseif key == 208 then -- Стрелка вниз
+                currentOption = currentOption < #options and currentOption + 1 or 1
+                if settings.beepEnabled and sys.beep then
+                    sys.beep.beep(800, 0.05)
+                end
+                
+            elseif key == 28 then -- Enter
+                if currentOption == 1 then
+                    changeColorSetting("textColor")
+                elseif currentOption == 2 then
+                    changeColorSetting("bgColor")
+                elseif currentOption == 3 then
+                    changeFontSize()
+                elseif currentOption == 4 then
+                    settings.beepEnabled = not settings.beepEnabled
+                elseif currentOption == 5 then
+                    settings.autoBoot = not settings.autoBoot
+                elseif currentOption == 6 then
+                    if saveSettings() then
+                        applySettings()
+                        if settings.beepEnabled and sys.beep then
+                            sys.beep.beep(1200, 0.1)
+                        end
+                        return true
+                    else
+                        print("Ошибка сохранения настроек!")
+                        newline()
+                        print("Нажмите любую клавишу...")
+                        computer.pullSignal()
+                    end
+                elseif currentOption == 7 then
+                    applySettings() -- Восстанавливаем старые настройки
+                    return false
+                end
+                
+            elseif key == 1 then -- Escape
+                applySettings()
+                return false
+            end
+        end
+    end
+end
+
+-- Функция для изменения цвета
+function changeColorSetting(settingType)
+    local colors = {
+        {name = "Белый", value = 0xFFFFFF},
+        {name = "Черный", value = 0x000000},
+        {name = "Красный", value = 0xFF0000},
+        {name = "Зеленый", value = 0x00FF00},
+        {name = "Синий", value = 0x0000FF},
+        {name = "Желтый", value = 0xFFFF00},
+        {name = "Голубой", value = 0x00FFFF},
+        {name = "Пурпурный", value = 0xFF00FF}
+    }
+    
+    local currentIndex = 1
+    for i, color in ipairs(colors) do
+        if color.value == settings[settingType] then
+            currentIndex = i
+            break
+        end
+    end
+    
+    while true do
+        clear()
+        print("Выберите цвет для " .. (settingType == "textColor" and "текста" or "фона"))
+        newline()
+        
+        for i, color in ipairs(colors) do
+            if i == currentIndex then
+                print("> " .. color.name)
+            else
+                print("  " .. color.name)
+            end
+            newline()
+        end
+        
+        newline()
+        print("Enter - выбрать, Escape - отмена")
+        
+        -- Временно применяем выбранный цвет для предпросмотра
+        local tempValue = colors[currentIndex].value
+        if settingType == "textColor" then
+            sys.gpu.setForeground(tempValue)
+        else
+            sys.gpu.setBackground(tempValue)
+        end
+        
+        local event = {computer.pullSignal()}
+        if event[1] == "key_down" then
+            local key = event[4]
+            
+            if key == 200 then -- Стрелка вверх
+                currentIndex = currentIndex > 1 and currentIndex - 1 or #colors
+                if settings.beepEnabled and sys.beep then
+                    sys.beep.beep(800, 0.05)
+                end
+                
+            elseif key == 208 then -- Стрелка вниз
+                currentIndex = currentIndex < #colors and currentIndex + 1 or 1
+                if settings.beepEnabled and sys.beep then
+                    sys.beep.beep(800, 0.05)
+                end
+                
+            elseif key == 28 then -- Enter
+                settings[settingType] = colors[currentIndex].value
+                applySettings()
+                if settings.beepEnabled and sys.beep then
+                    sys.beep.beep(1200, 0.1)
+                end
+                return
+                
+            elseif key == 1 then -- Escape
+                applySettings()
+                return
+            end
+        end
+    end
+end
+
+-- Функция для изменения размера шрифта
+function changeFontSize()
+    while true do
+        clear()
+        print("Выберите размер шрифта (1-6)")
+        newline()
+        print("Текущий размер: " .. settings.fontSize)
+        newline()
+        print("Стрелки влево/вправо - изменить")
+        newline()
+        print("Enter - подтвердить, Escape - отмена")
+        
+        local event = {computer.pullSignal()}
+        if event[1] == "key_down" then
+            local key = event[4]
+            
+            if key == 203 then -- Стрелка влево
+                settings.fontSize = math.max(1, settings.fontSize - 1)
+                applySettings()
+                if settings.beepEnabled and sys.beep then
+                    sys.beep.beep(700, 0.05)
+                end
+                
+            elseif key == 205 then -- Стрелка вправо
+                settings.fontSize = math.min(6, settings.fontSize + 1)
+                applySettings()
+                if settings.beepEnabled and sys.beep then
+                    sys.beep.beep(700, 0.05)
+                end
+                
+            elseif key == 28 then -- Enter
+                if settings.beepEnabled and sys.beep then
+                    sys.beep.beep(1200, 0.1)
+                end
+                return
+                
+            elseif key == 1 then -- Escape
+                return
+            end
+        end
+    end
+end
+
 -- Интерактивное меню BIOS
 function showMenu()
     clear()
@@ -222,22 +507,27 @@ function showMenu()
     newline()
     print("3. Показать дисковую информацию")
     newline()
-    print("4. Перезапуск")
+    print("4. Настройки BIOS")
     newline()
-    print("5. Выход из системы")
+    print("5. Перезапуск")
+    newline()
+    print("6. Выход из системы")
     newline()
     newline()
     newline()
     newline()
-    print("Выберите опцию (1-5): ")
+    print("Выберите опцию (1-6): ")
     
     local selected = nil
     while not selected do
         local event = {computer.pullSignal()}
         if event[1] == "key_down" then
             local key = event[4]
-            if key >= 2 and key <= 6 then -- 1-5 keys
+            if key >= 2 and key <= 7 then -- 1-6 keys
                 selected = key - 1
+                if settings.beepEnabled and sys.beep then
+                    sys.beep.beep(1000, 0.1)
+                end
             end
         end
     end
@@ -290,8 +580,15 @@ function main()
         return
     end
     
+    -- Автозагрузка ОС если включена
+    if settings.autoBoot and fileExists("/boot/init.lua") then
+        if bootOS() then
+            return
+        end
+    end
+    
     -- Короткий звук при запуске
-    if sys.beep then
+    if settings.beepEnabled and sys.beep then
         sys.beep.beep(1500, 0.1)
     end
     
@@ -329,9 +626,12 @@ function main()
             end
             
         elseif choice == 4 then
-            computer.shutdown(true)
+            showSettingsMenu()
             
         elseif choice == 5 then
+            computer.shutdown(true)
+            
+        elseif choice == 6 then
             computer.shutdown()
         end
     end
