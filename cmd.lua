@@ -201,6 +201,21 @@ function fileExists(path)
     return false
 end
 
+-- Проверка существования директории
+function dirExists(path)
+    for address, type in component.list() do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.exists and fs.isDirectory then
+                if pcall(function() return fs.exists(path) and fs.isDirectory(path) end) then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
 -- Загрузка файла через component.filesystem
 function loadFile(path)
     for address, type in component.list() do
@@ -222,6 +237,44 @@ function loadFile(path)
         end
     end
     error("Невозможно прочитать файл: " .. path)
+end
+
+-- Запись в файл
+function writeFile(path, content)
+    for address, type in component.list() do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.open and fs.write then
+                local handle, reason = fs.open(path, "w")
+                if handle then
+                    fs.write(handle, content)
+                    fs.close(handle)
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- Список файлов в директории
+function listFiles(path)
+    local files = {}
+    for address, type in component.list() do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.list and fs.isDirectory then
+                if pcall(function() return fs.isDirectory(path) end) then
+                    local list = fs.list(path)
+                    for _, file in ipairs(list) do
+                        table.insert(files, file)
+                    end
+                    return files
+                end
+            end
+        end
+    end
+    return files
 end
 
 -- Загрузка и выполнение файла
@@ -541,6 +594,221 @@ function changeFontSize()
     end
 end
 
+-- Командная строка
+function commandLine()
+    local commandHistory = {}
+    local historyIndex = 0
+    local currentCommand = ""
+    
+    while true do
+        clear()
+        print("=== КОМАНДНАЯ СТРОКА BIOS ===")
+        newline()
+        print("Доступные команды:")
+        newline()
+        print("help - показать справку")
+        print("cls - очистить экран")
+        print("dir [path] - список файлов")
+        print("type <file> - показать содержимое файла")
+        print("info - системная информация")
+        print("disks - информация о дисках")
+        print("beep - тест звука")
+        print("reboot - перезагрузка")
+        print("shutdown - выключение")
+        print("exit - выход в меню")
+        newline()
+        print("Введите команду:")
+        newline()
+        
+        -- Отображение приглашения командной строки
+        print("BIOS> " .. currentCommand)
+        
+        local cursorPos = #currentCommand + 1
+        
+        while true do
+            local event = {computer.pullSignal()}
+            if event[1] == "key_down" then
+                local key = event[4]
+                local char = event[6]
+                
+                if key == 28 then -- Enter
+                    if #currentCommand > 0 then
+                        table.insert(commandHistory, currentCommand)
+                        historyIndex = #commandHistory + 1
+                        executeCommand(currentCommand)
+                        currentCommand = ""
+                        break
+                    end
+                    
+                elseif key == 14 then -- Backspace
+                    if #currentCommand > 0 then
+                        currentCommand = currentCommand:sub(1, -2)
+                        cursorPos = math.max(1, cursorPos - 1)
+                    end
+                    
+                elseif key == 1 then -- Esc
+                    return
+                    
+                elseif key == 200 then -- Стрелка вверх
+                    if #commandHistory > 0 then
+                        historyIndex = math.max(1, historyIndex - 1)
+                        currentCommand = commandHistory[historyIndex] or ""
+                        cursorPos = #currentCommand + 1
+                    end
+                    
+                elseif key == 208 then -- Стрелка вниз
+                    if #commandHistory > 0 then
+                        historyIndex = math.min(#commandHistory + 1, historyIndex + 1)
+                        if historyIndex > #commandHistory then
+                            currentCommand = ""
+                        else
+                            currentCommand = commandHistory[historyIndex]
+                        end
+                        cursorPos = #currentCommand + 1
+                    end
+                    
+                elseif char and char >= 32 and char <= 126 then
+                    currentCommand = currentCommand .. string.char(char)
+                    cursorPos = cursorPos + 1
+                end
+                
+                -- Обновление отображения команды
+                clear()
+                print("=== КОМАНДНАЯ СТРОКА BIOS ===")
+                newline()
+                print("Доступные команды:")
+                newline()
+                print("help - показать справку")
+                print("cls - очистить экран")
+                print("dir [path] - список файлов")
+                print("type <file> - показать содержимое файла")
+                print("info - системная информация")
+                print("disks - информация о дисках")
+                print("beep - тест звука")
+                print("reboot - перезагрузка")
+                print("shutdown - выключение")
+                print("exit - выход в меню")
+                newline()
+                print("Введите команду:")
+                newline()
+                print("BIOS> " .. currentCommand)
+            end
+        end
+    end
+end
+
+-- Выполнение команды
+function executeCommand(cmd)
+    local args = {}
+    for arg in cmd:gmatch("%S+") do
+        table.insert(args, arg)
+    end
+    
+    if #args == 0 then
+        return
+    end
+    
+    local command = args[1]:lower()
+    
+    if command == "help" then
+        newline()
+        print("Справка по командам:")
+        newline()
+        print("help    - показать эту справку")
+        print("cls     - очистить экран")
+        print("dir     - список файлов в текущей директории")
+        print("dir <path> - список файлов в указанной директории")
+        print("type <file> - показать содержимое файла")
+        print("info    - информация о системе")
+        print("disks   - информация о дисках")
+        print("beep    - тест звукового сигнала")
+        print("reboot  - перезагрузка компьютера")
+        print("shutdown - выключение компьютера")
+        print("exit    - выход из командной строки")
+        
+    elseif command == "cls" then
+        clear()
+        return
+        
+    elseif command == "dir" then
+        local path = args[2] or "/"
+        newline()
+        print("Содержимое " .. path .. ":")
+        newline()
+        
+        if dirExists(path) then
+            local files = listFiles(path)
+            for _, file in ipairs(files) do
+                local fullPath = path .. (path:sub(-1) == "/" and "" or "/") .. file
+                if dirExists(fullPath) then
+                    print("[DIR]  " .. file)
+                else
+                    print("       " .. file)
+                end
+                newline()
+            end
+        else
+            print("Директория не существует: " .. path)
+        end
+        
+    elseif command == "type" then
+        if #args < 2 then
+            newline()
+            print("Ошибка: укажите имя файла")
+            return
+        end
+        
+        local filename = args[2]
+        newline()
+        
+        if fileExists(filename) then
+            local content = loadFile(filename)
+            print("Содержимое файла " .. filename .. ":")
+            newline()
+            print(content)
+        else
+            print("Файл не существует: " .. filename)
+        end
+        
+    elseif command == "info" then
+        newline()
+        showInfo()
+        
+    elseif command == "disks" then
+        newline()
+        showDiskInfo()
+        
+    elseif command == "beep" then
+        if sys.beep then
+            sys.beep.beep(1000, 0.3)
+            newline()
+            print("Звуковой сигнал воспроизведен")
+        else
+            newline()
+            print("Звуковое устройство не найдено")
+        end
+        
+    elseif command == "reboot" then
+        computer.shutdown(true)
+        
+    elseif command == "shutdown" then
+        computer.shutdown()
+        
+    elseif command == "exit" then
+        return true
+        
+    else
+        newline()
+        print("Неизвестная команда: " .. command)
+        print("Введите 'help' для списка команд")
+    end
+    
+    newline()
+    print("Нажмите любую клавишу для продолжения...")
+    computer.pullSignal()
+    return false
+end
+
 -- Интерактивное меню BIOS
 function showMenu()
     clear()
@@ -557,21 +825,23 @@ function showMenu()
     newline()
     print("4. Настройки BIOS")
     newline()
-    print("5. Перезапуск")
+    print("5. Командная строка")
     newline()
-    print("6. Выход из системы")
+    print("6. Перезапуск")
+    newline()
+    print("7. Выход из системы")
     newline()
     newline()
     newline()
     newline()
-    print("Выберите опцию (1-6): ")
+    print("Выберите опцию (1-7): ")
     
     local selected = nil
     while not selected do
         local event = {computer.pullSignal()}
         if event[1] == "key_down" then
             local key = event[4]
-            if key >= 2 and key <= 7 then -- 1-6 keys
+            if key >= 2 and key <= 8 then -- 1-7 keys
                 selected = key - 1
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(1000, 0.1)
@@ -677,9 +947,12 @@ function main()
             showSettingsMenu()
             
         elseif choice == 5 then
-            computer.shutdown(true)
+            commandLine()
             
         elseif choice == 6 then
+            computer.shutdown(true)
+            
+        elseif choice == 7 then
             computer.shutdown()
         end
     end
