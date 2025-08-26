@@ -55,6 +55,11 @@ function initialize()
     return true
 end
 
+-- Вспомогательная функция для trim
+function string.trim(s)
+    return s:match("^%s*(.-)%s*$")
+end
+
 -- Загрузка настроек из файла
 function loadSettings()
     if fileExists("/bios/settings.cfg") then
@@ -93,8 +98,10 @@ function saveSettings()
     for address, type in component.list() do
         if type == "filesystem" then
             local fs = component.proxy(address)
-            if fs.makeDirectory and not fs.exists("/bios") then
-                fs.makeDirectory("/bios")
+            if fs.makeDirectory and not (fs.exists("/bios") and not fs.isDirectory("/bios")) then
+                if not fs.exists("/bios") then
+                    fs.makeDirectory("/bios")
+                end
             end
         end
     end
@@ -121,8 +128,21 @@ function applySettings()
     if sys.gpu then
         sys.gpu.setBackground(settings.bgColor)
         sys.gpu.setForeground(settings.textColor)
+        -- Попытка установить шрифт, если поддерживается
         if sys.gpu.setFont then
-            pcall(function() sys.gpu.setFont(settings.fontSize) end)
+            pcall(function() 
+                local maxFont = 1
+                -- Определяем максимальный поддерживаемый размер шрифта
+                for i = 1, 6 do
+                    if pcall(function() return sys.gpu.setFont(i) end) then
+                        maxFont = i
+                    else
+                        break
+                    end
+                end
+                settings.fontSize = math.min(settings.fontSize, maxFont)
+                sys.gpu.setFont(settings.fontSize) 
+            end)
         end
     end
 end
@@ -252,7 +272,7 @@ function showDiskInfo()
         return
     end
     
-    print("Сторонние девайсы:")
+    print("Дисковые пространства:")
     newline()
     
     for i, disk in ipairs(disks) do
@@ -306,9 +326,6 @@ function showSettingsMenu()
         clear()
         print("=== Настройки BIOS ===")
         newline()
-        newline()
-        newline()
-        newline()
         
         for i, option in ipairs(options) do
             if i == currentOption then
@@ -320,27 +337,26 @@ function showSettingsMenu()
         end
         
         newline()
-        newline()
-        newline()
-        print("Используйте стрелки (вверх и вниз да) для навигации и Enter для выбора")
+        print("Стрелки - навигация, Пробел - изменить, Enter - выбрать")
+        print("Escape - выход")
         
         local event = {computer.pullSignal()}
         if event[1] == "key_down" then
             local key = event[4]
             
-            if key == 200 then -- Стрелка вверх
+            if key == 17 then -- Стрелка вверх
                 currentOption = currentOption > 1 and currentOption - 1 or #options
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(800, 0.05)
                 end
                 
-            elseif key == 208 then -- Стрелка вниз
+            elseif key == 31 then -- Стрелка вниз
                 currentOption = currentOption < #options and currentOption + 1 or 1
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(800, 0.05)
                 end
                 
-            elseif key == 28 then -- Enter
+            elseif key == 57 then -- Пробел (изменить настройку)
                 if currentOption == 1 then
                     changeColorSetting("textColor")
                 elseif currentOption == 2 then
@@ -349,9 +365,18 @@ function showSettingsMenu()
                     changeFontSize()
                 elseif currentOption == 4 then
                     settings.beepEnabled = not settings.beepEnabled
+                    if settings.beepEnabled and sys.beep then
+                        sys.beep.beep(1000, 0.1)
+                    end
                 elseif currentOption == 5 then
                     settings.autoBoot = not settings.autoBoot
-                elseif currentOption == 6 then
+                    if settings.beepEnabled and sys.beep then
+                        sys.beep.beep(1000, 0.1)
+                    end
+                end
+                
+            elseif key == 28 then -- Enter (выбрать пункт)
+                if currentOption == 6 then
                     if saveSettings() then
                         applySettings()
                         if settings.beepEnabled and sys.beep then
@@ -359,9 +384,9 @@ function showSettingsMenu()
                         end
                         return true
                     else
-                        print("Ошибка сохранения настроек")
+                        print("Ошибка сохранения настроек!")
                         newline()
-                        print("Нажмите любую клавишу для выхода...")
+                        print("Нажмите любую клавишу...")
                         computer.pullSignal()
                     end
                 elseif currentOption == 7 then
@@ -413,7 +438,7 @@ function changeColorSetting(settingType)
         end
         
         newline()
-        print("Enter - выбрать, Esc - отмена")
+        print("Стрелки - выбор, Enter - подтвердить, Escape - отмена")
         
         -- Временно применяем выбранный цвет для предпросмотра
         local tempValue = colors[currentIndex].value
@@ -427,13 +452,13 @@ function changeColorSetting(settingType)
         if event[1] == "key_down" then
             local key = event[4]
             
-            if key == 200 then -- Стрелка вверх
+            if key == 17 then -- Стрелка вверх
                 currentIndex = currentIndex > 1 and currentIndex - 1 or #colors
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(800, 0.05)
                 end
                 
-            elseif key == 208 then -- Стрелка вниз
+            elseif key == 31 then -- Стрелка вниз
                 currentIndex = currentIndex < #colors and currentIndex + 1 or 1
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(800, 0.05)
@@ -459,27 +484,44 @@ end
 function changeFontSize()
     while true do
         clear()
-        print("Выберите размер шрифта (от 1 до 6)")
+        print("Выберите размер шрифта (1-6)")
         newline()
         print("Текущий размер: " .. settings.fontSize)
         newline()
-        print("Стрелки влево и вправо - изменить")
+        print("Стрелки влево/вправо - изменить")
         newline()
-        print("Enter - подтвердить, Esc - отмена")
+        print("Enter - подтвердить, Escape - отмена")
+        
+        -- Проверяем поддержку шрифтов
+        local maxSupported = 1
+        if sys.gpu and sys.gpu.setFont then
+            for i = 1, 6 do
+                if pcall(function() return sys.gpu.setFont(i) end) then
+                    maxSupported = i
+                else
+                    break
+                end
+            end
+        end
+        
+        if maxSupported == 1 then
+            print("Смена шрифтов не поддерживается!")
+            newline()
+        end
         
         local event = {computer.pullSignal()}
         if event[1] == "key_down" then
             local key = event[4]
             
-            if key == 203 then -- Стрелка влево
+            if key == 30 then -- Стрелка влево
                 settings.fontSize = math.max(1, settings.fontSize - 1)
                 applySettings()
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(700, 0.05)
                 end
                 
-            elseif key == 205 then -- Стрелка вправо
-                settings.fontSize = math.min(6, settings.fontSize + 1)
+            elseif key == 32 then -- Стрелка вправо
+                settings.fontSize = math.min(6, math.min(maxSupported, settings.fontSize + 1))
                 applySettings()
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(700, 0.05)
@@ -586,7 +628,7 @@ function main()
     end
     
     -- Автозагрузка ОС если включена
-    if settings.autoBoot and fileExists("/boot/init.lua") then
+    if settings.autoBoot then
         if bootOS() then
             return
         end
