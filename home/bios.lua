@@ -41,7 +41,7 @@ end
 -- Цветовая схема
 local colors = {
     background = 0x1E1E1E,
-    header_bg = 0x2D2D2D,
+    header_bg = 0x2D2D30,
     header_text = 0xFFFFFF,
     text = 0xCCCCCC,
     accent = 0x0078D7,
@@ -91,6 +91,68 @@ local function safeWriteFile(fs, path, content)
     
     fs.close(file)
     return true
+end
+
+-- Улучшенная функция загрузки файла
+local function downloadFile(internet, url)
+    local handle, reason = internet.request(url)
+    if not handle then
+        return nil, "Ошибка запроса: " .. tostring(reason)
+    end
+    
+    -- Ждем ответа
+    local timeout = 10
+    local start_time = computer.uptime()
+    while computer.uptime() - start_time < timeout do
+        local result, reason = handle.finishConnect()
+        if result then
+            break
+        elseif reason then
+            handle.close()
+            return nil, "Ошибка подключения: " .. tostring(reason)
+        end
+        computer.pullSignal(0.1)
+    end
+    
+    -- Проверяем статус ответа
+    local _, _, status = handle.response()
+    if status ~= 200 then
+        handle.close()
+        return nil, "HTTP ошибка: " .. tostring(status)
+    end
+    
+    -- Читаем данные
+    local content = ""
+    local chunk_count = 0
+    local total_size = 0
+    
+    while true do
+        local chunk, reason = handle.read()
+        if not chunk then
+            if reason then
+                handle.close()
+                return nil, "Ошибка чтения: " .. tostring(reason)
+            end
+            break
+        end
+        
+        content = content .. chunk
+        chunk_count = chunk_count + 1
+        total_size = total_size + #chunk
+        
+        -- Даем время другим процессам
+        if chunk_count % 5 == 0 then
+            computer.pullSignal(0)
+        end
+    end
+    
+    handle.close()
+    
+    if #content == 0 then
+        return nil, "Файл пустой"
+    end
+    
+    return content, total_size
 end
 
 -- Функция для проверки, является ли текущий запуск установщиком
@@ -335,60 +397,36 @@ local function installerMain()
     
     -- Список файлов для загрузки
     local files_to_download = {
-        "system/boot.lua",
-        "system/core.lua",
-        "system/apps.lua",
-        "system/gui.lua"
+        "home/boot.lua",
+        "home/core.lua",
+        "home/apps.lua",
+        "home/gui.lua"
     }
     
     local base_url = "https://raw.githubusercontent.com/CubeAITech/TemOS/main/"
     
-    -- Создаем структуру папок на диске
-    local disk = selected_disk.proxy
-    
     -- Загружаем и устанавливаем каждый файл
     for i, filename in ipairs(files_to_download) do
-        showMessage("Загрузка " .. filename, "0%")
+        showMessage("Загрузка " .. filename, "Подготовка...")
         
         local url = base_url .. filename
-        local handle, err = internet.request(url)
-        if not handle then
-            showMessage("Ошибка сети", "Не удалось подключиться: " .. tostring(err))
+        local content, size, err = downloadFile(internet, url)
+        
+        if not content then
+            showMessage("Ошибка загрузки", filename .. ": " .. tostring(err))
             computer.pullSignal(3)
             computer.shutdown()
             return
         end
         
-        -- Чтение данных
-        local content = ""
-        local chunk_count = 0
-        
-        while true do
-            local chunk = handle.read()
-            if not chunk then break end
-            
-            content = content .. chunk
-            chunk_count = chunk_count + 1
-            
-            -- Обновляем прогресс
-            if chunk_count % 10 == 0 then
-                showMessage("Загрузка " .. filename, math.floor(#content / 1024) .. " KB")
-            end
-        end
-        handle.close()
-        
-        -- Проверяем минимальный размер файла
-        if #content < 10 then
-            showMessage("Ошибка загрузки", filename .. " слишком мал: " .. #content .. " байт")
-            computer.pullSignal(3)
-            computer.shutdown()
-            return
-        end
+        -- Показываем размер файла
+        showMessage("Загрузка " .. filename, string.format("%.1f KB", size / 1024))
+        computer.pullSignal(0.5)
         
         -- Записываем файл на диск
         showMessage("Запись " .. filename, "На диск " .. selected_disk.letter)
         
-        local success, err = safeWriteFile(disk, filename, content)
+        local success, err = safeWriteFile(selected_disk.proxy, filename, content)
         if not success then
             showMessage("Ошибка записи", "Не удалось записать " .. filename .. ": " .. tostring(err))
             computer.pullSignal(3)
@@ -437,7 +475,7 @@ boot()
 ]]
     
     -- Записываем init.lua
-    local success, err = safeWriteFile(disk, "init.lua", init_content)
+    local success, err = safeWriteFile(selected_disk.proxy, "init.lua", init_content)
     if not success then
         showMessage("Ошибка записи", "Не удалось создать init.lua: " .. tostring(err))
         computer.pullSignal(3)
@@ -446,10 +484,10 @@ boot()
     end
     
     -- Установка метки
-    pcall(disk.setLabel, "TemOS")
+    pcall(selected_disk.proxy.setLabel, "TemOS")
     
     -- Удаляем установщик с диска (если он там есть)
-    pcall(disk.remove, "installer.lua")
+    pcall(selected_disk.proxy.remove, "installer.lua")
     
     -- Финальный экран
     clearScreen()
