@@ -70,3 +70,4 @@ while true do
             print("напомню 'help' введи даун")
         end
     end
+end
