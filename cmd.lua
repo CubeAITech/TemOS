@@ -33,10 +33,10 @@ local commands = {
         end
     },
     exit = {
-        description = "Выйти из программы",
+        description = "выйти",
         execute = function()
-            print("👋 До свидания!")
-            os.exit()
+            print("пока компьютер!")
+            os.shutdown()
         end
     }
 }
