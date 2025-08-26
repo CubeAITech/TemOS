@@ -601,38 +601,44 @@ function simpleCommandLine()
     newline()
     print("Введите команду (или 'exit' для выхода):")
     newline()
-    print("BIOS> ")
-    
-    local currentCommand = ""
-    local inputY = cursorY - 1
     
     while true do
-        local event = {computer.pullSignal()}
-        if event[1] == "key_down" then
-            local key = event[4]
-            local char = event[3] -- Символ в OpenComputers находится в event[3]
-            
-            if key == 28 then -- Enter
-                if currentCommand:lower() == "exit" then
-                    return
-                end
-                executeCommand(currentCommand)
-                newline()
-                print("BIOS> ")
-                currentCommand = ""
-                inputY = cursorY - 1
+        print("BIOS> ")
+        local currentCommand = ""
+        local inputX = cursorX  -- Запоминаем позицию X после "BIOS> "
+        local inputY = cursorY  -- Запоминаем позицию Y
+        
+        while true do
+            local event = {computer.pullSignal()}
+            if event[1] == "key_down" then
+                local key = event[4]
+                local char = event[3] -- Символ в OpenComputers находится в event[3]
                 
-            elseif key == 14 then -- Backspace
-                if #currentCommand > 0 then
-                    currentCommand = currentCommand:sub(1, -2)
-                    -- Очищаем и перерисовываем строку ввода
-                    sys.gpu.fill(7, inputY, screenWidth - 6, 1, " ")
-                    sys.gpu.set(7, inputY, currentCommand)
+                if key == 28 then -- Enter
+                    if currentCommand:lower() == "exit" then
+                        return
+                    end
+                    newline()  -- Переходим на новую строку перед выводом результата
+                    executeCommand(currentCommand)
+                    newline()
+                    break  -- Выходим из внутреннего цикла для нового ввода
+                    
+                elseif key == 14 then -- Backspace
+                    if #currentCommand > 0 then
+                        currentCommand = currentCommand:sub(1, -2)
+                        -- Очищаем только область ввода и перерисовываем
+                        sys.gpu.fill(inputX, inputY, screenWidth - inputX + 1, 1, " ")
+                        sys.gpu.set(inputX, inputY, currentCommand)
+                        cursorX = inputX + #currentCommand
+                        cursorY = inputY
+                    end
+                    
+                elseif char and char >= 32 and char <= 126 then
+                    currentCommand = currentCommand .. string.char(char)
+                    sys.gpu.set(inputX + #currentCommand - 1, inputY, string.char(char))
+                    cursorX = inputX + #currentCommand
+                    cursorY = inputY
                 end
-                
-            elseif char and char >= 32 and char <= 126 then
-                currentCommand = currentCommand .. string.char(char)
-                sys.gpu.set(7 + #currentCommand - 1, inputY, string.char(char))
             end
         end
     end
@@ -652,7 +658,6 @@ function executeCommand(cmd)
     local command = args[1]:lower()
     
     if command == "help" then
-        newline()
         print("Справка по командам:")
         newline()
         print("help    - показать эту справку")
@@ -673,7 +678,6 @@ function executeCommand(cmd)
         
     elseif command == "dir" then
         local path = args[2] or "/"
-        newline()
         print("Содержимое " .. path .. ":")
         newline()
         
@@ -686,7 +690,6 @@ function executeCommand(cmd)
                 else
                     print("       " .. file)
                 end
-                newline()
             end
         else
             print("Директория не существует: " .. path)
@@ -694,13 +697,11 @@ function executeCommand(cmd)
         
     elseif command == "type" then
         if #args < 2 then
-            newline()
             print("Ошибка: укажите имя файла")
             return
         end
         
         local filename = args[2]
-        newline()
         
         if fileExists(filename) then
             local content = loadFile(filename)
@@ -712,20 +713,16 @@ function executeCommand(cmd)
         end
         
     elseif command == "info" then
-        newline()
         showInfo()
         
     elseif command == "disks" then
-        newline()
         showDiskInfo()
         
     elseif command == "beep" then
         if sys.beep then
             sys.beep.beep(1000, 0.3)
-            newline()
             print("Звуковой сигнал воспроизведен")
         else
-            newline()
             print("Звуковое устройство не найдено")
         end
         
@@ -739,7 +736,6 @@ function executeCommand(cmd)
         return true
         
     else
-        newline()
         print("Неизвестная команда: " .. command)
         print("Введите 'help' для списка команд")
     end
