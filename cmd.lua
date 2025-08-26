@@ -1,16 +1,10 @@
--- OpenComputers BIOS
--- Версия 2.5 (без io библиотеки)
-
--- Глобальные переменные
 local cursorX = 1
 local cursorY = 1
 local screenWidth = 80
 local screenHeight = 25
 local sys = {}
 
--- Основная функция инициализации
 function initialize()
-    -- Поиск GPU
     for address, type in component.list() do
         if type == "gpu" then
             sys.gpu = component.proxy(address)
@@ -18,7 +12,6 @@ function initialize()
         end
     end
     
-    -- Поиск экрана и подключение GPU
     if sys.gpu then
         for address, type in component.list() do
             if type == "screen" then
@@ -35,7 +28,6 @@ function initialize()
         end
     end
     
-    -- Поиск бипера
     for address, type in component.list() do
         if type == "beep" then
             sys.beep = component.proxy(address)
@@ -43,7 +35,6 @@ function initialize()
         end
     end
     
-    -- Поиск клавиатуры
     for address, type in component.list() do
         if type == "keyboard" then
             sys.keyboard = address
@@ -54,7 +45,6 @@ function initialize()
     return true
 end
 
--- Функция вывода текста
 function print(text)
     if not sys.gpu then
         return false
@@ -62,7 +52,6 @@ function print(text)
     
     local textStr = tostring(text)
     
-    -- Перенос строки если текст не помещается
     if cursorX + #textStr > screenWidth then
         newline()
     end
@@ -73,12 +62,10 @@ function print(text)
     return true
 end
 
--- Переход на новую строку
 function newline()
     cursorX = 1
     cursorY = cursorY + 1
     
-    -- Прокрутка экрана если достигнут низ
     if cursorY > screenHeight then
         cursorY = screenHeight
         if sys.gpu then
@@ -133,7 +120,7 @@ function loadFile(path)
             end
         end
     end
-    error("Cannot read file: " .. path)
+    error("Невозможно прочитать файл: " .. path)
 end
 
 -- Загрузка и выполнение файла
@@ -141,7 +128,7 @@ function dofile(path)
     local content = loadFile(path)
     local func, reason = load(content, "=" .. path)
     if not func then
-        error("Failed to load: " .. tostring(reason))
+        error("Ошибка загрузки или выполнения файла: " .. tostring(reason))
     end
     return func()
 end
@@ -157,7 +144,7 @@ function getDiskInfo()
                 local total = fs.spaceTotal()
                 local used = fs.spaceUsed()
                 local free = total - used
-                local label = fs.getLabel() or "Disk " .. address:sub(1, 6)
+                local label = fs.getLabel() or "Диск " .. address:sub(1, 6)
                 
                 table.insert(disks, {
                     address = address,
@@ -179,19 +166,19 @@ function showDiskInfo()
     local disks = getDiskInfo()
     
     if #disks == 0 then
-        print("No disks found")
+        print("Диски не найдены")
         newline()
         return
     end
     
-    print("Storage devices:")
+    print("Сторонние девайсы:")
     newline()
     
     for i, disk in ipairs(disks) do
         print("  " .. disk.label .. ":")
-        print(string.format("    Used: %d/%d bytes (%d%%)", 
+        print(string.format("    Использовано: %d/%d байт (%d%%)", 
             disk.used, disk.total, disk.percent))
-        print(string.format("    Free: %d bytes", disk.free))
+        print(string.format("    Доступно: %d bytes", disk.free))
         newline()
     end
 end
@@ -199,14 +186,14 @@ end
 -- Показать информацию о системе
 function showInfo()
     clear()
-    print("OpenComputers BIOS v2.5")
+    print("BIOS")
     newline()
-    print("Memory: " .. computer.totalMemory() .. "K")
-    print("Energy: " .. math.floor(computer.energy()))
+    print("Память: " .. computer.totalMemory() .. "K")
+    print("Заряд: " .. math.floor(computer.energy()))
     newline()
     
     if sys.gpu then
-        print("Screen: " .. screenWidth .. "x" .. screenHeight)
+        print("Размер экрана: " .. screenWidth .. "x" .. screenHeight)
         newline()
     end
     
@@ -224,15 +211,21 @@ end
 -- Интерактивное меню BIOS
 function showMenu()
     clear()
-    print("OpenComputers BIOS v2.5 - Boot Menu")
+    print("BIOS - Главное меню")
     newline()
-    print("1. Boot from primary disk (/boot/init.lua)")
-    print("2. Show system information")
-    print("3. Show disk information")
-    print("4. Reboot")
-    print("5. Shutdown")
+    print("1. Запуск OS из диска (/boot/init.lua)")
     newline()
-    print("Select option: ")
+    print("2. Показать системную информацию")
+    newline()
+    print("3. Показать дисковую информацию")
+    newline()
+    print("4. Перезапуск")
+    newline()
+    print("5. Выход из системы")
+    newline()
+    newline()
+    newline()
+    print("Выберите опцию (1-5): ")
     
     local selected = nil
     while not selected do
@@ -252,9 +245,9 @@ end
 function bootOS()
     if not fileExists("/boot/init.lua") then
         clear()
-        print("OS not found: /boot/init.lua")
+        print("OS не найдена: /boot/init.lua")
         newline()
-        print("Press any key to return to menu...")
+        print("Нажмите на любую кнопку для того что бы вернуться в меню...")
         
         -- Ожидание клавиши
         while true do
@@ -270,10 +263,10 @@ function bootOS()
     local ok, err = pcall(dofile, "/boot/init.lua")
     if not ok then
         clear()
-        print("Boot error:")
+        print("Ошибка OS:")
         print(err)
         newline()
-        print("Press any key to return to menu...")
+        print("Нажмите на любую кнопку для того что бы вернуться в меню...")
         while true do
             local event = {computer.pullSignal()}
             if event[1] == "key_down" then
@@ -311,7 +304,7 @@ function main()
         elseif choice == 2 then
             showInfo()
             newline()
-            print("Press any key to continue...")
+            print("Нажмите на любую кнопку для того что бы вернуться в меню...")
             while true do
                 local event = {computer.pullSignal()}
                 if event[1] == "key_down" then
@@ -323,7 +316,7 @@ function main()
             clear()
             showDiskInfo()
             newline()
-            print("Press any key to continue...")
+            print("Нажмите на любую кнопку для того что бы вернуться в меню...")
             while true do
                 local event = {computer.pullSignal()}
                 if event[1] == "key_down" then
@@ -347,10 +340,10 @@ function handleError(err)
     end
     if sys.gpu then
         clear()
-        print("BIOS ERROR:")
+        print("Ошибка BIOS:")
         print(err)
         newline()
-        print("System halted")
+        print("Система остановлена*.")
     end
     while true do
         computer.pullSignal()
