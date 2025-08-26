@@ -1,5 +1,5 @@
 -- OpenComputers BIOS
--- Версия 2.4 (без io библиотеки)
+-- Версия 2.5 (без io библиотеки)
 
 -- Глобальные переменные
 local cursorX = 1
@@ -146,18 +146,115 @@ function dofile(path)
     return func()
 end
 
--- Загрузка ОС
+-- Получение информации о дисках
+function getDiskInfo()
+    local disks = {}
+    
+    for address, type in component.list() do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.spaceTotal and fs.spaceUsed then
+                local total = fs.spaceTotal()
+                local used = fs.spaceUsed()
+                local free = total - used
+                local label = fs.getLabel() or "Disk " .. address:sub(1, 6)
+                
+                table.insert(disks, {
+                    address = address,
+                    label = label,
+                    total = total,
+                    used = used,
+                    free = free,
+                    percent = total > 0 and math.floor((used / total) * 100) or 0
+                })
+            end
+        end
+    end
+    
+    return disks
+end
+
+-- Отображение информации о дисках
+function showDiskInfo()
+    local disks = getDiskInfo()
+    
+    if #disks == 0 then
+        print("No disks found")
+        newline()
+        return
+    end
+    
+    print("Storage devices:")
+    newline()
+    
+    for i, disk in ipairs(disks) do
+        print("  " .. disk.label .. ":")
+        print(string.format("    Used: %d/%d bytes (%d%%)", 
+            disk.used, disk.total, disk.percent))
+        print(string.format("    Free: %d bytes", disk.free))
+        newline()
+    end
+end
+
+-- Показать информацию о системе
+function showInfo()
+    clear()
+    print("OpenComputers BIOS v2.5")
+    newline()
+    print("Memory: " .. computer.totalMemory() .. "K")
+    print("Energy: " .. math.floor(computer.energy()))
+    newline()
+    
+    if sys.gpu then
+        print("Screen: " .. screenWidth .. "x" .. screenHeight)
+        newline()
+    end
+    
+    print("Components:")
+    newline()
+    for address, type in component.list() do
+        print("  " .. type)
+        newline()
+    end
+    
+    newline()
+    showDiskInfo()
+end
+
+-- Интерактивное меню BIOS
+function showMenu()
+    clear()
+    print("OpenComputers BIOS v2.5 - Boot Menu")
+    newline()
+    print("1. Boot from primary disk (/boot/init.lua)")
+    print("2. Show system information")
+    print("3. Show disk information")
+    print("4. Reboot")
+    print("5. Shutdown")
+    newline()
+    print("Select option: ")
+    
+    local selected = nil
+    while not selected do
+        local event = {computer.pullSignal()}
+        if event[1] == "key_down" then
+            local key = event[4]
+            if key >= 2 and key <= 6 then -- 1-5 keys
+                selected = key - 1
+            end
+        end
+    end
+    
+    return selected
+end
+
+-- Загрузка ОС (опциональная)
 function bootOS()
     if not fileExists("/boot/init.lua") then
         clear()
-        print("BIOS v14.88")
+        print("OS not found: /boot/init.lua")
         newline()
-        print("OS не найдена.")
-        print("Миссия: /boot/init.lua")
-        newline()
-        print("Вставьте диск с OS или установите OS")
-        newline()
-        print("Нажмите на любую кнопку для перезапуска...")
+        print("Press any key to return to menu...")
         
         -- Ожидание клавиши
         while true do
@@ -166,47 +263,27 @@ function bootOS()
                 break
             end
         end
-        computer.shutdown(true)
+        return false
     end
     
     -- Загрузка ОС
     local ok, err = pcall(dofile, "/boot/init.lua")
     if not ok then
         clear()
-        print("Ошибка OS:")
+        print("Boot error:")
         print(err)
         newline()
-        print("Нажмите на любую кнопку для перезапуска...")
+        print("Press any key to return to menu...")
         while true do
             local event = {computer.pullSignal()}
             if event[1] == "key_down" then
                 break
             end
         end
-        computer.shutdown(true)
-    end
-end
-
--- Показать информацию о системе
-function showInfo()
-    clear()
-    print("BIOS v14.88")
-    newline()
-    print("Память: " .. computer.totalMemory() .. "K")
-    print("Энергия: " .. math.floor(computer.energy()))
-    newline()
-    
-    if sys.gpu then
-        print("Размер экрана: " .. screenWidth .. "x" .. screenHeight)
-        newline()
+        return false
     end
     
-    print("Компоненты:")
-    newline()
-    for address, type in component.list() do
-        print("  " .. type)
-        newline()
-    end
+    return true
 end
 
 -- Главная функция
@@ -216,22 +293,51 @@ function main()
         return
     end
     
-    -- Показать информацию
-    showInfo()
-    
-    print("Инициализация завершена")
-    print("Booting OS...")
-    
-    -- Короткий звук
+    -- Короткий звук при запуске
     if sys.beep then
         sys.beep.beep(1500, 0.1)
     end
     
-    -- Задержка
-    for i = 1, 1000000 do end
-    
-    -- Загрузка ОС
-    bootOS()
+    -- Главный цикл меню
+    while true do
+        local choice = showMenu()
+        
+        if choice == 1 then
+            -- Попытка загрузки ОС
+            if bootOS() then
+                break -- Выход из цикла если ОС загрузилась успешно
+            end
+            
+        elseif choice == 2 then
+            showInfo()
+            newline()
+            print("Press any key to continue...")
+            while true do
+                local event = {computer.pullSignal()}
+                if event[1] == "key_down" then
+                    break
+                end
+            end
+            
+        elseif choice == 3 then
+            clear()
+            showDiskInfo()
+            newline()
+            print("Press any key to continue...")
+            while true do
+                local event = {computer.pullSignal()}
+                if event[1] == "key_down" then
+                    break
+                end
+            end
+            
+        elseif choice == 4 then
+            computer.shutdown(true)
+            
+        elseif choice == 5 then
+            computer.shutdown()
+        end
+    end
 end
 
 -- Обработчик ошибок
@@ -241,10 +347,10 @@ function handleError(err)
     end
     if sys.gpu then
         clear()
-        print("Ошибка BIOS:")
+        print("BIOS ERROR:")
         print(err)
         newline()
-        print("система сдохла.")
+        print("System halted")
     end
     while true do
         computer.pullSignal()
