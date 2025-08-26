@@ -272,7 +272,7 @@ function showDiskInfo()
         return
     end
     
-    print("Дисковые пространства:")
+    print("Сторонние девайсы:")
     newline()
     
     for i, disk in ipairs(disks) do
@@ -324,7 +324,7 @@ function showSettingsMenu()
     
     while true do
         clear()
-        print("=== Настройки BIOS ===")
+        print("=== НАСТРОЙКИ BIOS ===")
         newline()
         
         for i, option in ipairs(options) do
@@ -338,19 +338,20 @@ function showSettingsMenu()
         
         newline()
         print("Стрелки - навигация, Пробел - изменить, Enter - выбрать")
-        print("Escape - выход")
+        print("Esc - выход")
         
         local event = {computer.pullSignal()}
         if event[1] == "key_down" then
             local key = event[4]
             
-            if key == 17 then -- Стрелка вверх
+            -- Правильные коды стрелок для OpenComputers
+            if key == 208 then -- Стрелка вверх
                 currentOption = currentOption > 1 and currentOption - 1 or #options
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(800, 0.05)
                 end
                 
-            elseif key == 31 then -- Стрелка вниз
+            elseif key == 200 then -- Стрелка вниз
                 currentOption = currentOption < #options and currentOption + 1 or 1
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(800, 0.05)
@@ -394,7 +395,7 @@ function showSettingsMenu()
                     return false
                 end
                 
-            elseif key == 1 then -- Escape
+            elseif key == 1 then -- Esc
                 applySettings()
                 return false
             end
@@ -438,7 +439,7 @@ function changeColorSetting(settingType)
         end
         
         newline()
-        print("Стрелки - выбор, Enter - подтвердить, Escape - отмена")
+        print("Стрелки - выбор, Enter - подтвердить, Esc - отмена")
         
         -- Временно применяем выбранный цвет для предпросмотра
         local tempValue = colors[currentIndex].value
@@ -452,13 +453,13 @@ function changeColorSetting(settingType)
         if event[1] == "key_down" then
             local key = event[4]
             
-            if key == 17 then -- Стрелка вверх
+            if key == 208 then -- Стрелка вверх
                 currentIndex = currentIndex > 1 and currentIndex - 1 or #colors
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(800, 0.05)
                 end
                 
-            elseif key == 31 then -- Стрелка вниз
+            elseif key == 200 then -- Стрелка вниз
                 currentIndex = currentIndex < #colors and currentIndex + 1 or 1
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(800, 0.05)
@@ -472,7 +473,7 @@ function changeColorSetting(settingType)
                 end
                 return
                 
-            elseif key == 1 then -- Escape
+            elseif key == 1 then -- Esc
                 applySettings()
                 return
             end
@@ -490,7 +491,7 @@ function changeFontSize()
         newline()
         print("Стрелки влево/вправо - изменить")
         newline()
-        print("Enter - подтвердить, Escape - отмена")
+        print("Enter - подтвердить, Esc - отмена")
         
         -- Проверяем поддержку шрифтов
         local maxSupported = 1
@@ -513,14 +514,14 @@ function changeFontSize()
         if event[1] == "key_down" then
             local key = event[4]
             
-            if key == 30 then -- Стрелка влево
+            if key == 203 then -- Стрелка влево
                 settings.fontSize = math.max(1, settings.fontSize - 1)
                 applySettings()
                 if settings.beepEnabled and sys.beep then
                     sys.beep.beep(700, 0.05)
                 end
                 
-            elseif key == 32 then -- Стрелка вправо
+            elseif key == 205 then -- Стрелка вправо
                 settings.fontSize = math.min(6, math.min(maxSupported, settings.fontSize + 1))
                 applySettings()
                 if settings.beepEnabled and sys.beep then
@@ -533,7 +534,7 @@ function changeFontSize()
                 end
                 return
                 
-            elseif key == 1 then -- Escape
+            elseif key == 1 then -- Esc
                 return
             end
         end
