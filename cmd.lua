@@ -1,3 +1,7 @@
+-- Получаем адрес GPU и создаем proxy
+local bootAddress = computer.getBootAddress()
+local gpu = component.proxy(component.list("gpu")())
+
 local commands = {
     help = {
         description = "команды",
@@ -23,8 +27,8 @@ local commands = {
     clear = {
         description = "удалить все науй",
         execute = function()
-            component.gpu.fill(1, 1, 160, 50, " ")
-            component.gpu.set(1, 1, "")
+            gpu.fill(1, 1, 80, 25, " ")
+            gpu.setCursor(1, 1)
         end
     },
     echo = {
@@ -37,14 +41,13 @@ local commands = {
         description = "выйти",
         execute = function()
             write("пока компьютер!\n")
-            os.exit()
+            computer.shutdown()
         end
     }
 }
 
 -- Функция для вывода текста через GPU
 function write(text)
-    local gpu = component.gpu
     local w, h = gpu.getResolution()
     local x, y = gpu.getCursor()
     
@@ -76,9 +79,9 @@ function write(text)
 end
 
 -- Инициализация
-component.gpu.setResolution(80, 25)
-component.gpu.fill(1, 1, 80, 25, " ")
-component.gpu.setCursor(1, 1)
+gpu.setResolution(80, 25)
+gpu.fill(1, 1, 80, 25, " ")
+gpu.setCursor(1, 1)
 
 write("TemOS loaded\n")
 write("введите 'help' для списка говно-команд\n")
