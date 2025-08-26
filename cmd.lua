@@ -1,35 +1,35 @@
 local commands = {
     help = {
-        description = "Показать список команд",
+        description = "команды",
         execute = function()
-            print("📋 Доступные команды:")
+            print("сегодня вам доступно")
             for cmd, info in pairs(commands) do
                 print(string.format("  %-10s - %s", cmd, info.description))
             end
         end
     },
     time = {
-        description = "Показать текущее время",
+        description = "время",
         execute = function()
-            print("🕒 Текущее время: " .. os.date("%H:%M:%S"))
+            print("время: " .. os.date("%H:%M:%S"))
         end
     },
     date = {
-        description = "Показать текущую дату",
+        description = "число седня",
         execute = function()
-            print("📅 Сегодня: " .. os.date("%d.%m.%Y"))
+            print("сегодня: " .. os.date("%d.%m.%Y"))
         end
     },
     clear = {
-        description = "Очистить экран",
+        description = "удалить все науй",
         execute = function()
             os.execute("cls || clear")
         end
     },
     echo = {
-        description = "Повторить введенный текст",
+        description = "отправить говно текст за вас",
         execute = function(args)
-            print("📢 " .. table.concat(args, " "))
+            print("! " .. table.concat(args, " "))
         end
     },
     exit = {
@@ -41,8 +41,8 @@ local commands = {
     }
 }
 
-print("🚀 Добро пожаловать в TemOS!")
-print("Введите 'help' для списка команд")
+print("TemOS loaded")
+print("введите 'help' для списка говно-команд")
 
 while true do
     io.write("> ")
@@ -63,10 +63,10 @@ while true do
             end)
             
             if not success then
-                print("❌ Ошибка выполнения команды: " .. err)
+                print("ай бля ошибка: " .. err)
             end
         else
-            print("❌ Команда не найдена: " .. command)
-            print("ℹ️  Введите 'help' для списка доступных команд")
+            print("ойойой нет такой команды пошел науй: " .. command)
+            print("напомню 'help' введи даун")
         end
     end
