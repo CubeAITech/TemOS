@@ -36,7 +36,7 @@ local commands = {
         description = "выйти",
         execute = function()
             print("пока компьютер!")
-            os.shutdown()
+            os.exit() -- Изменено с os.shutdown() на os.exit()
         end
     }
 }
