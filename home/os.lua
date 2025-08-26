@@ -1,6 +1,6 @@
 -- ==============================================
 -- GraphOS - Продвинутая ОС с GUI для OpenComputers
--- Версия 2.0
+-- Версия 2.0 (Исправленная)
 -- ==============================================
 
 local component = require("component")
@@ -85,7 +85,7 @@ function splitString(input, sep)
     return t
 end
 
-function table.contains(tbl, value)
+function tableContains(tbl, value)
     for _, v in pairs(tbl) do
         if v == value then return true end
     end
@@ -109,8 +109,10 @@ function drawText(x, y, text, fgColor, bgColor)
     if fgColor then gpu.setForeground(fgColor) end
     if bgColor then gpu.setBackground(bgColor) end
     gpu.set(x, y, text)
-    if fgColor then gpu.setForeground(config.theme.text) end
-    if bgColor then gpu.setBackground(config.theme.background) end
+    if fgColor or bgColor then
+        gpu.setForeground(config.theme.text)
+        gpu.setBackground(config.theme.background)
+    end
 end
 
 function centerText(text, y)
@@ -131,8 +133,8 @@ function createButton(x, y, width, text, onClick)
             
             local bgColor = isHover and config.theme.button_hover or config.theme.button
             drawBox(self.x, self.y, self.width, self.height, bgColor, config.theme.border)
-            drawText(math.floor(self.x + (self.width - unicode.len(self.text)) / 2), 
-                    self.y, self.text, config.theme.text, bgColor)
+            local textX = math.floor(self.x + (self.width - unicode.len(self.text)) / 2)
+            drawText(textX, self.y, self.text, config.theme.text, bgColor)
         end
     }
 end
@@ -155,8 +157,8 @@ function fsList(path)
 end
 
 function fsCreateFile(path, content)
-    local dir = string.match(path, "^(.*/)[^/]*$")
-    local filename = string.match(path, "/([^/]*)$")
+    local dir = string.match(path, "^(.*/)[^/]*$") or "/"
+    local filename = string.match(path, "/([^/]*)$") or path
     
     if fileSystem[dir] and fileSystem[dir].type == "dir" then
         fileSystem[dir].content[filename] = {
@@ -213,6 +215,11 @@ function createWindow(title, x, y, width, height)
         handleClick = function(self, x, y)
             if not self.open then return false end
             
+            -- Проверяем, попадает ли клик в область окна
+            if x < self.x or x > self.x + self.width or y < self.y or y > self.y + self.height then
+                return false
+            end
+            
             -- Кнопка закрытия
             if x >= self.x + self.width - 3 and x <= self.x + self.width and y == self.y then
                 self.open = false
@@ -223,7 +230,9 @@ function createWindow(title, x, y, width, height)
             for _, button in ipairs(self.buttons) do
                 if x >= button.x and x <= button.x + button.width and 
                    y >= button.y and y <= button.y + button.height then
-                    if button.onClick then button.onClick() end
+                    if button.onClick then 
+                        button.onClick() 
+                    end
                     return true
                 end
             end
@@ -243,15 +252,42 @@ function showMessageBox(title, message)
     local x, y = math.floor((w - width) / 2), math.floor((h - height) / 2)
     
     local window = createWindow(title, x, y, width, height)
+    
+    -- Добавляем содержимое через content
     window.content = {
         function()
-            drawText(x + 2, y + 2, message)
+            -- Разбиваем сообщение на строки
+            local lines = {}
+            local currentLine = ""
+            for word in message:gmatch("%S+") do
+                if #currentLine + #word + 1 > width - 4 then
+                    table.insert(lines, currentLine)
+                    currentLine = word
+                else
+                    if currentLine ~= "" then
+                        currentLine = currentLine .. " " .. word
+                    else
+                        currentLine = word
+                    end
+                end
+            end
+            if currentLine ~= "" then
+                table.insert(lines, currentLine)
+            end
+            
+            for i, line in ipairs(lines) do
+                if i <= height - 4 then
+                    drawText(window.x + 2, window.y + 2 + i, line)
+                end
+            end
         end
     }
     
     window:addButton(width - 12, height - 2, 10, "OK", function()
         window.open = false
     end)
+    
+    return window
 end
 
 -- Системные утилиты
@@ -268,16 +304,25 @@ function systemInfo()
                 "Разрешение: " .. w .. "x" .. h,
                 "Память: " .. math.floor(computer.totalMemory()/1024) .. "K/" .. 
                             math.floor(computer.freeMemory()/1024) .. "K свободно",
-                "Время работы: " .. math.floor(computer.uptime()) .. " сек",
-                "Энергия: " .. string.format("%.1f", computer.energy()) .. "/" .. 
-                             string.format("%.1f", computer.maxEnergy())
+                "Время работы: " .. math.floor(computer.uptime()) .. " сек"
             }
             
+            if component.isAvailable("eeprom") then
+                table.insert(info, "Энергия: " .. string.format("%.1f", computer.energy()) .. "/" .. 
+                                 string.format("%.1f", computer.maxEnergy()))
+            end
+            
             for i, line in ipairs(info) do
-                drawText(window.x + 2, window.y + 2 + i, "• " .. line)
+                if window.y + 2 + i <= window.y + window.height - 2 then
+                    drawText(window.x + 2, window.y + 2 + i, "• " .. line)
+                end
             end
         end
     }
+    
+    window:addButton(20, window.height - 2, 20, "Закрыть", function()
+        window.open = false
+    end)
 end
 
 function fileManager()
@@ -290,9 +335,17 @@ function fileManager()
         function()
             drawText(window.x + 2, window.y + 2, "Текущая папка: " .. currentPath)
             
-            for i, file in ipairs(files) do
+            local maxLines = window.height - 6
+            for i = 1, math.min(#files, maxLines) do
+                local file = files[i]
                 local icon = file.type == "dir" and "📁 " or "📄 "
-                drawText(window.x + 2, window.y + 4 + i, icon .. file.name)
+                if window.y + 4 + i <= window.y + window.height - 2 then
+                    drawText(window.x + 2, window.y + 4 + i, icon .. file.name)
+                end
+            end
+            
+            if #files > maxLines then
+                drawText(window.x + 2, window.y + window.height - 2, "... и еще " .. (#files - maxLines) .. " файлов")
             end
         end
     }
@@ -302,19 +355,27 @@ function fileManager()
     end)
     
     window:addButton(20, window.height - 2, 15, "Новая папка", function()
-        showMessageBox("Создание папки", "Функция в разработке")
+        showMessageBox("Создание папка", "Функция в разработке")
+    end)
+    
+    window:addButton(38, window.height - 2, 15, "Закрыть", function()
+        window.open = false
     end)
 end
 
 function calculatorApp()
-    local window = createWindow("Калькулятор", 20, 5, 40, 12)
+    local window = createWindow("Калькулятор", 20, 5, 40, 15)
     local display = "0"
     local memory = 0
     
     window.content = {
         function()
             drawBox(window.x + 2, window.y + 2, window.width - 4, 3, config.theme.panel)
-            drawText(window.x + window.width - unicode.len(display) - 3, window.y + 3, display)
+            local displayText = display
+            if unicode.len(displayText) > window.width - 6 then
+                displayText = "..." .. unicode.sub(displayText, -window.width + 6)
+            end
+            drawText(window.x + window.width - unicode.len(displayText) - 3, window.y + 3, displayText)
         end
     }
     
@@ -334,12 +395,20 @@ function calculatorApp()
                 if btn == "C" then
                     display = "0"
                 elseif btn == "=" then
-                    local success, result = pcall(load("return " .. display))
+                    local success, result = pcall(function()
+                        return load("return " .. display)()
+                    end)
                     if success then
                         display = tostring(result)
                     else
                         display = "Error"
                     end
+                elseif btn == "M+" then
+                    memory = tonumber(display) or 0
+                elseif btn == "M-" then
+                    memory = 0
+                elseif btn == "MR" then
+                    display = tostring(memory)
                 else
                     if display == "0" or display == "Error" then
                         display = btn
@@ -360,13 +429,26 @@ function textEditor()
     window.content = {
         function()
             drawBox(window.x + 2, window.y + 2, window.width - 4, window.height - 6, config.theme.panel)
-            drawText(window.x + 3, window.y + 3, text)
             
-            -- Курсор
-            if os.time() % 2 == 0 then
-                local cursorX = window.x + 3 + (cursorPos % (window.width - 6))
-                local cursorY = window.y + 3 + math.floor(cursorPos / (window.width - 6))
-                drawText(cursorX, cursorY, "▊", config.theme.accent)
+            -- Отображаем текст построчно
+            local lines = {}
+            local currentLine = ""
+            for char in text:gmatch(".") do
+                if char == "\n" or unicode.len(currentLine) >= window.width - 6 then
+                    table.insert(lines, currentLine)
+                    currentLine = char == "\n" and "" or char
+                else
+                    currentLine = currentLine .. char
+                end
+            end
+            if currentLine ~= "" then
+                table.insert(lines, currentLine)
+            end
+            
+            for i, line in ipairs(lines) do
+                if i <= window.height - 7 then
+                    drawText(window.x + 3, window.y + 2 + i, line)
+                end
             end
         end
     }
@@ -378,18 +460,22 @@ function textEditor()
     window:addButton(16, window.height - 2, 12, "Открыть", function()
         showMessageBox("Открытие", "Выберите файл...")
     end)
+    
+    window:addButton(30, window.height - 2, 12, "Закрыть", function()
+        window.open = false
+    end)
 end
 
 function paintApp()
     local window = createWindow("Рисовалка", 10, 3, 50, 20)
     local canvas = {}
     local brushColor = config.theme.accent
-    local brushChar = "█"
     
+    -- Инициализация холста
     for y = 1, 16 do
         canvas[y] = {}
         for x = 1, 46 do
-            canvas[y][x] = {char = " ", color = config.theme.background}
+            canvas[y][x] = {char = " ", color = config.theme.panel}
         end
     end
     
@@ -400,62 +486,57 @@ function paintApp()
             for y = 1, 16 do
                 for x = 1, 46 do
                     local pixel = canvas[y][x]
-                    drawText(window.x + 2 + x, window.y + 2 + y, pixel.char, pixel.color)
+                    gpu.setForeground(pixel.color)
+                    gpu.set(window.x + 2 + x, window.y + 2 + y, pixel.char)
                 end
             end
+            gpu.setForeground(config.theme.text)
         end
     }
     
     window:addButton(2, window.height - 2, 10, "Очистить", function()
         for y = 1, 16 do
             for x = 1, 46 do
-                canvas[y][x] = {char = " ", color = config.theme.background}
+                canvas[y][x] = {char = " ", color = config.theme.panel}
             end
         end
+    end)
+    
+    window:addButton(15, window.height - 2, 10, "Закрыть", function()
+        window.open = false
     end)
 end
 
 -- Игры
 function snakeGame()
     local window = createWindow("Змейка", 15, 5, 40, 20)
-    local snake = {{x=20, y=10}}
-    local food = {x=math.random(2,39), y=math.random(2,19)}
-    local direction = "right"
-    local score = 0
-    local gameOver = false
     
     window.content = {
         function()
             drawBox(window.x + 1, window.y + 1, 38, 18, config.theme.panel)
-            
-            -- Еда
-            drawText(window.x + food.x, window.y + food.y, "🍎", config.theme.success)
-            
-            -- Змейка
-            for i, segment in ipairs(snake) do
-                local char = i == 1 and "🔸" or "🔹"
-                drawText(window.x + segment.x, window.y + segment.y, char, config.theme.accent)
-            end
-            
-            -- Счет
-            drawText(window.x + 2, window.y + 19, "Счет: " .. score)
-            
-            if gameOver then
-                drawText(window.x + 10, window.y + 9, "ИГРА ОКОНЧЕНА!", config.theme.error)
-                drawText(window.x + 8, window.y + 10, "Счет: " .. score, config.theme.text)
-            end
+            drawText(window.x + 15, window.y + 9, "🎮 Змейка", config.theme.accent)
+            drawText(window.x + 12, window.y + 11, "В разработке...", config.theme.warning)
         end
     }
+    
+    window:addButton(15, window.height - 2, 10, "Закрыть", function()
+        window.open = false
+    end)
 end
 
 function minesweeperGame()
     local window = createWindow("Сапер", 10, 3, 40, 20)
+    
     window.content = {
         function()
             drawText(window.x + 15, window.y + 9, "🎮 Сапер", config.theme.accent)
             drawText(window.x + 10, window.y + 11, "В разработке...", config.theme.warning)
         end
     }
+    
+    window:addButton(15, window.height - 2, 10, "Закрыть", function()
+        window.open = false
+    end)
 end
 
 -- Рабочий стол
@@ -494,6 +575,7 @@ function setupDesktop()
                 local menu = createWindow("Игры", w-20, 2, 18, 8)
                 menu:addButton(1, 2, 16, "Змейка", snakeGame)
                 menu:addButton(1, 4, 16, "Сапер", minesweeperGame)
+                menu:addButton(1, 6, 16, "Закрыть", function() menu.open = false end)
             end
         }
     }
@@ -505,9 +587,9 @@ function drawDesktop()
     -- Фон
     drawBox(1, 1, w, h, config.theme.background)
     
-    -- Обои
-    for y = 1, h - taskbarHeight do
-        for x = 1, w do
+    -- Обои (упрощенные)
+    for y = 1, h - taskbarHeight, 2 do
+        for x = 1, w, 2 do
             if (x + y) % 4 == 0 then
                 drawText(x, y, "░", config.theme.panel)
             end
@@ -531,19 +613,61 @@ function drawDesktop()
     local timeText = os.date("%H:%M:%S")
     drawText(w - unicode.len(timeText) - 1, h - taskbarHeight + 2, timeText)
     
-    -- Открытые окна
+    -- Открытые окна на панели задач
+    local taskX = 11
     for i, window in ipairs(windows) do
-        if window.open then
-            local taskX = 11 + (i-1) * 15
-            if taskX < w - 20 then
-                drawBox(taskX, h - taskbarHeight + 1, 14, taskbarHeight, 
-                       activeWindow == window.id and config.theme.button_hover or config.theme.button)
-                local title = unicode.len(window.title) > 10 and 
-                             unicode.sub(window.title, 1, 10) .. "..." or window.title
-                drawText(taskX + 1, h - taskbarHeight + 2, title)
+        if window.open and taskX < w - 20 then
+            local title = window.title
+            if unicode.len(title) > 10 then
+                title = unicode.sub(title, 1, 10) .. ".."
             end
+            
+            drawBox(taskX, h - taskbarHeight + 1, 14, taskbarHeight, 
+                   activeWindow == window.id and config.theme.button_hover or config.theme.button)
+            drawText(taskX + 2, h - taskbarHeight + 2, title)
+            taskX = taskX + 15
         end
     end
+end
+
+function showStartMenu()
+    local w, h = gpu.getResolution()
+    local menu = createWindow("", 1, h - taskbarHeight - 15, 25, 16)
+    
+    menu.content = {
+        function()
+            local items = {
+                "🚀 GraphOS v" .. config.system.version,
+                "💻 Система",
+                "📁 Файловый менеджер",
+                "🧮 Калькулятор",
+                "📝 Текстовый редактор",
+                "🎨 Рисовалка",
+                "🎮 Игры",
+                "⚙️ Настройки",
+                "❓ Справка",
+                "⏻ Выключение"
+            }
+            
+            for i, item in ipairs(items) do
+                if menu.y + 1 + i <= menu.y + menu.height - 1 then
+                    drawText(menu.x + 2, menu.y + 1 + i, item)
+                end
+            end
+        end
+    }
+    
+    -- Добавляем обработчики для пунктов меню
+    menu:addButton(1, 3, 23, "", function() systemInfo() end)
+    menu:addButton(1, 4, 23, "", function() fileManager() end)
+    menu:addButton(1, 5, 23, "", function() calculatorApp() end)
+    menu:addButton(1, 6, 23, "", function() textEditor() end)
+    menu:addButton(1, 7, 23, "", function() paintApp() end)
+    menu:addButton(1, 8, 23, "", function() 
+        local gameMenu = createWindow("Игры", w-20, 2, 18, 8)
+        gameMenu:addButton(1, 2, 16, "Змейка", snakeGame)
+        gameMenu:addButton(1, 4, 16, "Сапер", minesweeperGame)
+    end)
 end
 
 function handleDesktopClick(x, y)
@@ -558,12 +682,13 @@ function handleDesktopClick(x, y)
         end
         
         -- Окна на панели задач
+        local taskX = 11
         for i, window in ipairs(windows) do
-            local taskX = 11 + (i-1) * 15
-            if x >= taskX and x <= taskX + 14 then
+            if window.open and x >= taskX and x <= taskX + 14 then
                 activeWindow = window.id
                 return true
             end
+            taskX = taskX + 15
         end
         
         return true
@@ -573,12 +698,14 @@ function handleDesktopClick(x, y)
     for _, icon in ipairs(desktopIcons) do
         if x >= icon.x and x <= icon.x + 2 and 
            y >= icon.y and y <= icon.y + 2 then
-            if icon.onClick then icon.onClick() end
+            if icon.onClick then 
+                icon.onClick() 
+            end
             return true
         end
     end
     
-    -- Окна
+    -- Окна (обрабатываем с конца для верхних окон)
     for i = #windows, 1, -1 do
         local window = windows[i]
         if window.open and window.handleClick(x, y) then
@@ -587,26 +714,8 @@ function handleDesktopClick(x, y)
         end
     end
     
+    -- Клик по пустому месту на рабочем столе
     return false
-end
-
-function showStartMenu()
-    local w, h = gpu.getResolution()
-    local menu = createWindow("", 1, h - taskbarHeight - 15, 25, 16)
-    menu.content = {
-        function()
-            drawText(menu.x + 2, menu.y + 2, "🚀 GraphOS v" .. config.system.version)
-            drawText(menu.x + 2, menu.y + 4, "💻 Система")
-            drawText(menu.x + 2, menu.y + 5, "📁 Файловый менеджер")
-            drawText(menu.x + 2, menu.y + 6, "🧮 Калькулятор")
-            drawText(menu.x + 2, menu.y + 7, "📝 Текстовый редактор")
-            drawText(menu.x + 2, menu.y + 8, "🎨 Рисовалка")
-            drawText(menu.x + 2, menu.y + 9, "🎮 Игры")
-            drawText(menu.x + 2, menu.y + 11, "⚙️ Настройки")
-            drawText(menu.x + 2, menu.y + 12, "❓ Справка")
-            drawText(menu.x + 2, menu.y + 14, "⏻ Выключение")
-        end
-    }
 end
 
 -- Основной цикл
@@ -626,8 +735,15 @@ function main()
     drawBox(1, 1, w, h, config.theme.background)
     centerText("🚀 GraphOS v" .. config.system.version, math.floor(h/2) - 2)
     centerText("Загрузка системы...", math.floor(h/2))
-    centerText("████████████████████", math.floor(h/2) + 1)
-    os.sleep(2)
+    
+    -- Простая анимация загрузки
+    for i = 1, 20 do
+        local progress = string.rep("█", i) .. string.rep("░", 20 - i)
+        centerText(progress, math.floor(h/2) + 1)
+        os.sleep(0.1)
+    end
+    
+    os.sleep(1)
     
     setupDesktop()
     
@@ -647,8 +763,10 @@ function main()
             mouseX, mouseY = x, y
             handleDesktopClick(x, y)
         elseif e == "key_down" then
-            if button == 211 then -- F12 для системной информации
+            if button == 88 then -- F12
                 systemInfo()
+            elseif button == 14 then -- Backspace
+                -- Ничего не делаем, чтобы не падать
             end
         end
         
@@ -662,6 +780,11 @@ function main()
         -- Ограничение количества окон
         if #windows > 5 then
             table.remove(windows, 1)
+        end
+        
+        -- Обновляем активное окно
+        if activeWindow and activeWindow > #windows then
+            activeWindow = #windows > 0 and #windows or nil
         end
     end
 end
