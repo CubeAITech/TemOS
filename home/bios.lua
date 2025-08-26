@@ -56,6 +56,43 @@ local colors = {
     error = 0xFF4444
 }
 
+-- Функция для безопасной записи файла
+local function safeWriteFile(fs, path, content)
+    -- Создаем директории, если они не существуют
+    local parts = {}
+    for part in path:gmatch("[^/]+") do
+        table.insert(parts, part)
+    end
+    
+    if #parts > 1 then
+        local dirPath = ""
+        for i = 1, #parts - 1 do
+            dirPath = dirPath .. (i > 1 and "/" or "") .. parts[i]
+            if not fs.exists(dirPath) then
+                local success, err = pcall(fs.makeDirectory, dirPath)
+                if not success and err ~= "file already exists" then
+                    return false, "Не удалось создать директорию " .. dirPath .. ": " .. tostring(err)
+                end
+            end
+        end
+    end
+    
+    -- Записываем файл
+    local file, err = fs.open(path, "w")
+    if not file then
+        return false, "Не удалось открыть файл " .. path .. ": " .. tostring(err)
+    end
+    
+    local success, err = pcall(fs.write, file, content)
+    if not success then
+        fs.close(file)
+        return false, "Не удалось записать в файл " .. path .. ": " .. tostring(err)
+    end
+    
+    fs.close(file)
+    return true
+end
+
 -- Функция для проверки, является ли текущий запуск установщиком
 local function isInstallerRunning()
     -- Проверяем наличие установленной системы
@@ -250,8 +287,8 @@ local function installerMain()
         drawButton(button_x, buttons_y + 5, button_width, 3, "ВЫХОД", true, false)
         
         -- Футер
-        drawText(math.floor((screen_width - unicode.len("TemOS")) / 2), 
-                screen_height - 1, "TemOS", 0x888888)
+        drawText(math.floor((screen_width - unicode.len("TemOS v1.0 - Новейшая операционная система")) / 2), 
+                screen_height - 1, "TemOS v1.0 - Новейшая операционная система", 0x888888)
         
         -- Ждем ввода пользователя
         local signal = {computer.pullSignal()}
@@ -298,17 +335,16 @@ local function installerMain()
     
     -- Список файлов для загрузки
     local files_to_download = {
-        "home/boot.lua",
-        "home/core.lua",
-        "home/apps.lua",
-        "home/gui.lua"
+        "system/boot.lua",
+        "system/core.lua",
+        "system/apps.lua",
+        "system/gui.lua"
     }
     
     local base_url = "https://raw.githubusercontent.com/CubeAITech/TemOS/main/"
     
     -- Создаем структуру папок на диске
     local disk = selected_disk.proxy
-    disk.makeDirectory("system")
     
     -- Загружаем и устанавливаем каждый файл
     for i, filename in ipairs(files_to_download) do
@@ -352,24 +388,13 @@ local function installerMain()
         -- Записываем файл на диск
         showMessage("Запись " .. filename, "На диск " .. selected_disk.letter)
         
-        local file, err = disk.open(filename, "w")
-        if not file then
-            showMessage("Ошибка записи", "Не удалось создать " .. filename .. ": " .. tostring(err))
-            computer.pullSignal(3)
-            computer.shutdown()
-            return
-        end
-        
-        local success, err = disk.write(file, content)
+        local success, err = safeWriteFile(disk, filename, content)
         if not success then
-            disk.close(file)
             showMessage("Ошибка записи", "Не удалось записать " .. filename .. ": " .. tostring(err))
             computer.pullSignal(3)
             computer.shutdown()
             return
         end
-        
-        disk.close(file)
     end
     
     -- Создаем init.lua который будет запускать систему
@@ -411,24 +436,14 @@ end
 boot()
 ]]
     
-    local init_file, err = disk.open("init.lua", "w")
-    if not init_file then
+    -- Записываем init.lua
+    local success, err = safeWriteFile(disk, "init.lua", init_content)
+    if not success then
         showMessage("Ошибка записи", "Не удалось создать init.lua: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
-    
-    local success, err = disk.write(init_file, init_content)
-    if not success then
-        disk.close(init_file)
-        showMessage("Ошибка записи", "Не удалось записать init.lua: " .. tostring(err))
-        computer.pullSignal(3)
-        computer.shutdown()
-        return
-    end
-    
-    disk.close(init_file)
     
     -- Установка метки
     pcall(disk.setLabel, "TemOS")
