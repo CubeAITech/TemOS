@@ -2,22 +2,22 @@ local commands = {
     help = {
         description = "команды",
         execute = function()
-            print("сегодня вам доступно")
+            io.write("сегодня вам доступно\n")
             for cmd, info in pairs(commands) do
-                print(string.format("  %-10s - %s", cmd, info.description))
+                io.write(string.format("  %-10s - %s\n", cmd, info.description))
             end
         end
     },
     time = {
         description = "время",
         execute = function()
-            print("время: " .. os.date("%H:%M:%S"))
+            io.write("время: " .. os.date("%H:%M:%S") .. "\n")
         end
     },
     date = {
         description = "число седня",
         execute = function()
-            print("сегодня: " .. os.date("%d.%m.%Y"))
+            io.write("сегодня: " .. os.date("%d.%m.%Y") .. "\n")
         end
     },
     clear = {
@@ -29,20 +29,20 @@ local commands = {
     echo = {
         description = "отправить говно текст за вас",
         execute = function(args)
-            print("! " .. table.concat(args, " "))
+            io.write("! " .. table.concat(args, " ") .. "\n")
         end
     },
     exit = {
         description = "выйти",
         execute = function()
-            print("пока компьютер!")
+            io.write("пока компьютер!\n")
             os.exit()
         end
     }
 }
 
-print("TemOS loaded")
-print("введите 'help' для списка говно-команд")
+io.write("TemOS loaded\n")
+io.write("введите 'help' для списка говно-команд\n")
 
 while true do
     io.write("> ")
@@ -63,11 +63,11 @@ while true do
             end)
             
             if not success then
-                print("ай бля ошибка: " .. err)
+                io.write("ай бля ошибка: " .. err .. "\n")
             end
         else
-            print("ойойой нет такой команды пошел науй: " .. command)
-            print("напомню 'help' введи даун")
+            io.write("ойойой нет такой команды пошел науй: " .. command .. "\n")
+            io.write("напомню 'help' введи даун\n")
         end
     end
 end
