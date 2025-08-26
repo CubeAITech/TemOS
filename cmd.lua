@@ -197,7 +197,7 @@ function showInfo()
         newline()
     end
     
-    print("Components:")
+    print("Установленные компоненты:")
     newline()
     for address, type in component.list() do
         print("  " .. type)
