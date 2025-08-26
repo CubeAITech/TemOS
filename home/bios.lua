@@ -295,72 +295,82 @@ local function installerMain()
     showMessage("Подключение к серверу...", "raw.githubusercontent.com")
     
     local internet = component.proxy(internet_addr)
-    local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/boot.lua")
-    if not handle then
-        showMessage("Ошибка сети", "Не удалось подключиться: " .. tostring(err))
-        computer.pullSignal(3)
-        computer.shutdown()
-        return
-    end
     
-    -- Чтение данных с прогрессом
-    local content = ""
-    local total_size = 0
-    local chunk_count = 0
+    -- Список файлов для загрузки
+    local files_to_download = {
+        "system/boot.lua",
+        "system/core.lua",
+        "system/apps.lua",
+        "system/gui.lua"
+    }
     
-    showMessage("Загрузка системы...", "0%")
+    local base_url = "https://raw.githubusercontent.com/CubeAITech/TemOS/main/"
     
-    while true do
-        local chunk = handle.read()
-        if not chunk then break end
-        
-        content = content .. chunk
-        total_size = total_size + #chunk
-        chunk_count = chunk_count + 1
-        
-        -- Обновляем прогресс каждые 5 чанков
-        if chunk_count % 5 == 0 then
-            local progress = math.min(100, math.floor(total_size / 500 * 100))
-            showMessage("Загрузка системы...", progress .. "%")
-        end
-    end
-    handle.close()
-    
-    -- Уменьшил минимальный размер проверки
-    if #content < 50 then
-        showMessage("Ошибка загрузки", "Файл слишком мал или поврежден: " .. #content .. " байт")
-        computer.pullSignal(3)
-        computer.shutdown()
-        return
-    end
-    
-    -- Запись на диск
-    showMessage("Запись на диск...", "Подготовка")
-    
+    -- Создаем структуру папок на диске
     local disk = selected_disk.proxy
-    
-    -- Создаем структуру папок
     disk.makeDirectory("system")
     
-    -- Записываем основной файл системы
-    local file, err = disk.open("system/boot.lua", "w")
-    if not file then
-        showMessage("Ошибка записи", "Не удалось создать system/boot.lua: " .. tostring(err))
-        computer.pullSignal(3)
-        computer.shutdown()
-        return
-    end
-    
-    local success, err = disk.write(file, content)
-    if not success then
+    -- Загружаем и устанавливаем каждый файл
+    for i, filename in ipairs(files_to_download) do
+        showMessage("Загрузка " .. filename, "0%")
+        
+        local url = base_url .. filename
+        local handle, err = internet.request(url)
+        if not handle then
+            showMessage("Ошибка сети", "Не удалось подключиться: " .. tostring(err))
+            computer.pullSignal(3)
+            computer.shutdown()
+            return
+        end
+        
+        -- Чтение данных
+        local content = ""
+        local chunk_count = 0
+        
+        while true do
+            local chunk = handle.read()
+            if not chunk then break end
+            
+            content = content .. chunk
+            chunk_count = chunk_count + 1
+            
+            -- Обновляем прогресс
+            if chunk_count % 10 == 0 then
+                showMessage("Загрузка " .. filename, math.floor(#content / 1024) .. " KB")
+            end
+        end
+        handle.close()
+        
+        -- Проверяем минимальный размер файла
+        if #content < 10 then
+            showMessage("Ошибка загрузки", filename .. " слишком мал: " .. #content .. " байт")
+            computer.pullSignal(3)
+            computer.shutdown()
+            return
+        end
+        
+        -- Записываем файл на диск
+        showMessage("Запись " .. filename, "На диск " .. selected_disk.letter)
+        
+        local file, err = disk.open(filename, "w")
+        if not file then
+            showMessage("Ошибка записи", "Не удалось создать " .. filename .. ": " .. tostring(err))
+            computer.pullSignal(3)
+            computer.shutdown()
+            return
+        end
+        
+        local success, err = disk.write(file, content)
+        if not success then
+            disk.close(file)
+            showMessage("Ошибка записи", "Не удалось записать " .. filename .. ": " .. tostring(err))
+            computer.pullSignal(3)
+            computer.shutdown()
+            return
+        end
+        
         disk.close(file)
-        showMessage("Ошибка записи", "Не удалось записать system/boot.lua: " .. tostring(err))
-        computer.pullSignal(3)
-        computer.shutdown()
-        return
     end
-    
-    disk.close(file)
     
     -- Создаем init.lua который будет запускать систему
     local init_content = [[-- TemOS Bootloader
@@ -409,7 +419,7 @@ boot()
         return
     end
     
-    success, err = disk.write(init_file, init_content)
+    local success, err = disk.write(init_file, init_content)
     if not success then
         disk.close(init_file)
         showMessage("Ошибка записи", "Не удалось записать init.lua: " .. tostring(err))
