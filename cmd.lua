@@ -1,11 +1,12 @@
 -- OpenComputers BIOS
--- Версия 2.3 (без setCursor и других несуществующих методов)
+-- Версия 2.4 (без io библиотеки)
 
--- Глобальные переменные для управления курсором
+-- Глобальные переменные
 local cursorX = 1
 local cursorY = 1
 local screenWidth = 80
 local screenHeight = 25
+local sys = {}
 
 -- Основная функция инициализации
 function initialize()
@@ -96,31 +97,52 @@ function clear()
     end
 end
 
--- Проверка существования файла
+-- Проверка существования файла через component.filesystem
 function fileExists(path)
-    local handle = io.open(path, "r")
-    if handle then
-        handle:close()
-        return true
+    -- Ищем любую файловую систему
+    for address, type in component.list() do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.exists and fs.isDirectory then
+                if pcall(function() return fs.exists(path) end) then
+                    return fs.exists(path)
+                end
+            end
+        end
     end
     return false
 end
 
--- Загрузка файла
+-- Загрузка файла через component.filesystem
+function loadFile(path)
+    for address, type in component.list() do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.open and fs.read then
+                local handle, reason = fs.open(path, "r")
+                if handle then
+                    local content = ""
+                    while true do
+                        local chunk = fs.read(handle, math.huge)
+                        if not chunk then break end
+                        content = content .. chunk
+                    end
+                    fs.close(handle)
+                    return content
+                end
+            end
+        end
+    end
+    error("Cannot read file: " .. path)
+end
+
+-- Загрузка и выполнение файла
 function dofile(path)
-    local handle = io.open(path, "r")
-    if not handle then
-        error("File not found: " .. path)
-    end
-    
-    local code = handle:read("*a")
-    handle:close()
-    
-    local func = load(code, "=" .. path)
+    local content = loadFile(path)
+    local func, reason = load(content, "=" .. path)
     if not func then
-        error("Failed to load file: " .. path)
+        error("Failed to load: " .. tostring(reason))
     end
-    
     return func()
 end
 
@@ -128,14 +150,14 @@ end
 function bootOS()
     if not fileExists("/boot/init.lua") then
         clear()
-        print("OpenComputers BIOS v2.3")
+        print("BIOS v14.88")
         newline()
-        print("OS not found!")
-        print("Missing: /boot/init.lua")
+        print("OS не найдена.")
+        print("Миссия: /boot/init.lua")
         newline()
-        print("Insert OS disk or install OS")
+        print("Вставьте диск с OS или установите OS")
         newline()
-        print("Press any key to reboot...")
+        print("Нажмите на любую кнопку для перезапуска...")
         
         -- Ожидание клавиши
         while true do
@@ -151,10 +173,10 @@ function bootOS()
     local ok, err = pcall(dofile, "/boot/init.lua")
     if not ok then
         clear()
-        print("Boot error:")
+        print("Ошибка OS:")
         print(err)
         newline()
-        print("Press any key to reboot...")
+        print("Нажмите на любую кнопку для перезапуска...")
         while true do
             local event = {computer.pullSignal()}
             if event[1] == "key_down" then
@@ -168,18 +190,18 @@ end
 -- Показать информацию о системе
 function showInfo()
     clear()
-    print("OpenComputers BIOS v2.3")
+    print("BIOS v14.88")
     newline()
-    print("Memory: " .. computer.totalMemory() .. "K")
-    print("Energy: " .. math.floor(computer.energy()))
+    print("Память: " .. computer.totalMemory() .. "K")
+    print("Энергия: " .. math.floor(computer.energy()))
     newline()
     
     if sys.gpu then
-        print("Screen: " .. screenWidth .. "x" .. screenHeight)
+        print("Размер экрана: " .. screenWidth .. "x" .. screenHeight)
         newline()
     end
     
-    print("Components:")
+    print("Компоненты:")
     newline()
     for address, type in component.list() do
         print("  " .. type)
@@ -190,7 +212,6 @@ end
 -- Главная функция
 function main()
     -- Инициализация системы
-    sys = {}
     if not initialize() then
         return
     end
@@ -198,7 +219,7 @@ function main()
     -- Показать информацию
     showInfo()
     
-    print("Initialization complete")
+    print("Инициализация завершена")
     print("Booting OS...")
     
     -- Короткий звук
@@ -220,10 +241,10 @@ function handleError(err)
     end
     if sys.gpu then
         clear()
-        print("BIOS ERROR:")
+        print("Ошибка BIOS:")
         print(err)
         newline()
-        print("System halted")
+        print("система сдохла.")
     end
     while true do
         computer.pullSignal()
