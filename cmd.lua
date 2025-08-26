@@ -1,51 +1,56 @@
+local component = require("component")
+local gpu = component.gpu
+local event = require("event")
+local term = require("term")
+
 local commands = {
     help = {
         description = "команды",
         execute = function()
-            io.write("сегодня вам доступно\n")
+            term.write("сегодня вам доступно\n")
             for cmd, info in pairs(commands) do
-                io.write(string.format("  %-10s - %s\n", cmd, info.description))
+                term.write(string.format("  %-10s - %s\n", cmd, info.description))
             end
         end
     },
     time = {
         description = "время",
         execute = function()
-            io.write("время: " .. os.date("%H:%M:%S") .. "\n")
+            term.write("время: " .. os.date("%H:%M:%S") .. "\n")
         end
     },
     date = {
         description = "число седня",
         execute = function()
-            io.write("сегодня: " .. os.date("%d.%m.%Y") .. "\n")
+            term.write("сегодня: " .. os.date("%d.%m.%Y") .. "\n")
         end
     },
     clear = {
         description = "удалить все науй",
         execute = function()
-            os.execute("cls || clear")
+            term.clear()
         end
     },
     echo = {
         description = "отправить говно текст за вас",
         execute = function(args)
-            io.write("! " .. table.concat(args, " ") .. "\n")
+            term.write("! " .. table.concat(args, " ") .. "\n")
         end
     },
     exit = {
         description = "выйти",
         execute = function()
-            io.write("пока компьютер!\n")
+            term.write("пока компьютер!\n")
             os.exit()
         end
     }
 }
 
-io.write("TemOS loaded\n")
-io.write("введите 'help' для списка говно-команд\n")
+term.write("TemOS loaded\n")
+term.write("введите 'help' для списка говно-команд\n")
 
 while true do
-    io.write("> ")
+    term.write("> ")
     local input = io.read():gsub("^%s*(.-)%s*$", "%1")
     
     if input ~= "" then
@@ -63,11 +68,11 @@ while true do
             end)
             
             if not success then
-                io.write("ай бля ошибка: " .. err .. "\n")
+                term.write("ай бля ошибка: " .. err .. "\n")
             end
         else
-            io.write("ойойой нет такой команды пошел науй: " .. command .. "\n")
-            io.write("напомню 'help' введи даун\n")
+            term.write("ойойой нет такой команды пошел науй: " .. command .. "\n")
+            term.write("напомню 'help' введи даун\n")
         end
     end
 end
