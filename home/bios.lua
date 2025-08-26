@@ -295,7 +295,7 @@ local function installerMain()
     showMessage("Подключение к серверу...", "raw.githubusercontent.com")
     
     local internet = component.proxy(internet_addr)
-    local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/system/boot.lua")
+    local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/boot.lua")
     if not handle then
         showMessage("Ошибка сети", "Не удалось подключиться: " .. tostring(err))
         computer.pullSignal(3)
