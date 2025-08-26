@@ -1,5 +1,5 @@
 -- OpenComputers BIOS
--- Версия 2.1 (без require и paint)
+-- Версия 2.2 (исправлены методы GPU)
 
 -- Таблица для хранения компонентов системы
 local sys = {
@@ -7,7 +7,9 @@ local sys = {
     screen = nil,
     keyboard = nil,
     beep = nil,
-    initialized = false
+    initialized = false,
+    cursorX = 1,
+    cursorY = 1
 }
 
 -- Имитация require через component.proxy
@@ -68,22 +70,15 @@ function print(text, x, y)
         return false
     end
     
-    local currentX = x or 1
-    local currentY = y or 1
-    
-    -- Если координаты не указаны, используем текущую позицию курсора
-    if not x and not y then
-        currentX, currentY = sys.gpu.getCursor()
-    end
+    local currentX = x or sys.cursorX
+    local currentY = y or sys.cursorY
     
     sys.gpu.set(currentX, currentY, tostring(text))
     
     -- Обновляем позицию курсора
-    local textLength = 0
-    for i = 1, #tostring(text) do
-        textLength = textLength + 1
-    end
-    sys.gpu.setCursor(currentX + textLength, currentY)
+    local textLength = #tostring(text)
+    sys.cursorX = currentX + textLength
+    sys.cursorY = currentY
     
     return true
 end
@@ -93,10 +88,25 @@ function clear()
     if sys.gpu and sys.screen then
         local width, height = sys.gpu.getResolution()
         sys.gpu.fill(1, 1, width, height, " ")
-        sys.gpu.setCursor(1, 1)
+        sys.cursorX = 1
+        sys.cursorY = 1
         return true
     end
     return false
+end
+
+-- Переход на новую строку
+function newline()
+    sys.cursorX = 1
+    sys.cursorY = sys.cursorY + 1
+    -- Проверка на выход за границы экрана
+    local _, height = sys.gpu.getResolution()
+    if sys.cursorY > height then
+        sys.cursorY = height
+        -- Прокрутка экрана вверх
+        sys.gpu.copy(1, 2, width, height - 1, 0, -1)
+        sys.gpu.fill(1, height, width, 1, " ")
+    end
 end
 
 -- Простая проверка существования файла
@@ -131,14 +141,15 @@ end
 function bootOS()
     if not fileExists("/boot/init.lua") then
         clear()
-        print("OpenComputers BIOS v2.1")
+        print("OpenComputers BIOS v2.2")
         print("========================")
+        newline()
         print("ОС не найдена!")
         print("Файл /boot/init.lua отсутствует")
-        print("")
+        newline()
         print("Вставьте диск с операционной системой")
         print("или установите ОС")
-        print("")
+        newline()
         print("Нажмите любую клавишу для перезагрузки...")
         
         -- Ожидание нажатия клавиши
@@ -160,7 +171,7 @@ function bootOS()
         clear()
         print("Ошибка загрузки ОС:")
         print(tostring(reason))
-        print("")
+        newline()
         print("Нажмите любую клавишу для перезагрузки...")
         if sys.keyboard then
             while true do
@@ -177,20 +188,25 @@ end
 -- Отображение информации о системе
 function showSystemInfo()
     clear()
-    print("OpenComputers BIOS v2.1")
+    print("OpenComputers BIOS v2.2")
     print("========================")
+    newline()
     print("Память: " .. computer.totalMemory() .. "K")
-    print("Энергия: " .. computer.energy())
+    print("Энергия: " .. math.floor(computer.energy()))
+    newline()
     
     if sys.gpu then
         local width, height = sys.gpu.getResolution()
         print("Разрешение: " .. width .. "x" .. height)
+        newline()
     end
     
     -- Информация о компонентах
-    print("Компоненты:")
-    for type, count in pairs(component.list()) do
-        print("  " .. type .. ": " .. count)
+    print("Доступные компоненты:")
+    newline()
+    for type in component.list() do
+        print("  " .. type)
+        newline()
     end
 end
 
@@ -215,7 +231,10 @@ function main()
     end
     
     -- Небольшая задержка для отображения информации
-    for i = 1, 1000000 do end -- Простая задержка
+    local delay = 1000000
+    while delay > 0 do
+        delay = delay - 1
+    end
     
     -- Загрузка операционной системы
     bootOS()
@@ -230,7 +249,7 @@ function errorHandler(err)
         clear()
         print("КРИТИЧЕСКАЯ ОШИБКА BIOS:")
         print(tostring(err))
-        print("")
+        newline()
         print("Система остановлена")
     end
     while true do computer.pullSignal() end
