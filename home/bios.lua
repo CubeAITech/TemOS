@@ -56,9 +56,50 @@ local colors = {
     error = 0xFF4444
 }
 
--- Основная функция
-local function main()
-    -- Инициализация
+-- Функция для проверки, является ли текущий запуск установщиком
+local function isInstallerRunning()
+    -- Проверяем, запущен ли мы из файла установщика
+    local shell = require("shell")
+    local args = {...}
+    
+    -- Если файл называется 'installer.lua' или запущен с параметром 'install'
+    if args[1] == "install" or shell.getRunningProgram():find("installer") then
+        return true
+    end
+    
+    -- Проверяем наличие метки установленной системы
+    for address, type in component.list("filesystem") do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.getLabel() == "TemOS" and fs.exists("system/boot.lua") then
+                return false -- Система уже установлена
+            end
+        end
+    end
+    
+    return true -- По умолчанию считаем, что это установщик
+end
+
+-- Основная функция установщика
+local function installerMain()
+    -- Проверяем, не установлена ли уже система
+    if not isInstallerRunning() then
+        -- Запускаем систему вместо установщика
+        local shell = require("shell")
+        for address, type in component.list("filesystem") do
+            if type == "filesystem" then
+                local fs = component.proxy(address)
+                if fs.getLabel() == "TemOS" and fs.exists("system/boot.lua") then
+                    fs.setLabel("TemOS") -- Убеждаемся, что метка установлена
+                    os.execute("system/boot.lua")
+                    return
+                end
+            end
+        end
+        error("Система установлена, но не найдена")
+    end
+    
+    -- Инициализация установщика
     local init_result, err = initialize()
     if not init_result then
         computer.beep(1000, 0.5)
@@ -280,7 +321,7 @@ local function main()
     showMessage("Подключение к серверу...", "raw.githubusercontent.com")
     
     local internet = component.proxy(internet_addr)
-    local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/init.lua")
+    local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/system/boot.lua")
     if not handle then
         showMessage("Ошибка сети", "Не удалось подключиться: " .. tostring(err))
         computer.pullSignal(3)
@@ -324,22 +365,13 @@ local function main()
     
     local disk = selected_disk.proxy
     
-    -- Создаем минимальный init.lua если загрузка не удалась
-    if #content < 100 then
-        content = [[local call = component.invoke;
-local screen = component.list("screen")() 
-local gpu = component.list("gpu")() 
-local gpu_proxy = component.proxy(gpu) 
-
-gpu_proxy.bind(screen) 
-gpu_proxy.set(1, 1, "Полностью рабочий TemOS")
-print("TemOS успешно загружен!")]]
-    end
+    -- Создаем структуру папок
+    disk.makeDirectory("system")
     
-    -- Записываем init.lua
-    local file, err = disk.open("init.lua", "w")
+    -- Записываем основной файл системы
+    local file, err = disk.open("system/boot.lua", "w")
     if not file then
-        showMessage("Ошибка записи", "Не удалось создать init.lua: " .. tostring(err))
+        showMessage("Ошибка записи", "Не удалось создать system/boot.lua: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
@@ -348,7 +380,7 @@ print("TemOS успешно загружен!")]]
     local success, err = disk.write(file, content)
     if not success then
         disk.close(file)
-        showMessage("Ошибка записи", "Не удалось записать init.lua: " .. tostring(err))
+        showMessage("Ошибка записи", "Не удалось записать system/boot.lua: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
@@ -356,33 +388,60 @@ print("TemOS успешно загружен!")]]
     
     disk.close(file)
     
-    -- Создаем .shrc для автоматического запуска init.lua при загрузке
-    local shrc_content = [[-- Автоматический запуск TemOS при загрузке
-if fs.exists("init.lua") then
-    print("Запуск TemOS...")
-    os.execute("init.lua")
-else
-    print("Ошибка: init.lua не найден")
-end]]
+    -- Создаем init.lua который будет запускать систему
+    local init_content = [[-- TemOS Bootloader
+local component = require("component")
+local computer = require("computer")
+
+-- Проверяем, установлена ли система
+local function systemExists()
+    for address, type in component.list("filesystem") do
+        if type == "filesystem" then
+            local fs = component.proxy(address)
+            if fs.getLabel() == "TemOS" and fs.exists("system/boot.lua") then
+                return true, fs
+            end
+        end
+    end
+    return false
+end
+
+-- Основная функция загрузки
+local function boot()
+    local exists, fs = systemExists()
+    if exists then
+        -- Запускаем систему
+        print("Загрузка TemOS...")
+        os.execute("system/boot.lua")
+    else
+        -- Запускаем установщик
+        print("Система не найдена. Запуск установщика...")
+        os.execute("installer.lua install")
+    end
+end
+
+-- Запускаем загрузчик
+boot()
+]]
     
-    local shrc_file, err = disk.open(".shrc", "w")
-    if not shrc_file then
-        showMessage("Ошибка записи", "Не удалось создать .shrc: " .. tostring(err))
+    local init_file, err = disk.open("init.lua", "w")
+    if not init_file then
+        showMessage("Ошибка записи", "Не удалось создать init.lua: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
     
-    success, err = disk.write(shrc_file, shrc_content)
+    success, err = disk.write(init_file, init_content)
     if not success then
-        disk.close(shrc_file)
-        showMessage("Ошибка записи", "Не удалось записать .shrc: " .. tostring(err))
+        disk.close(init_file)
+        showMessage("Ошибка записи", "Не удалось записать init.lua: " .. tostring(err))
         computer.pullSignal(3)
         computer.shutdown()
         return
     end
     
-    disk.close(shrc_file)
+    disk.close(init_file)
     
     -- Установка метки
     pcall(disk.setLabel, "TemOS")
@@ -398,8 +457,8 @@ end]]
     drawText(math.floor((screen_width - unicode.len("Компьютер будет перезагружен")) / 2), 
             math.floor(screen_height / 2), "Компьютер будет перезагружен", 0x888888)
     
-    drawText(math.floor((screen_width - unicode.len("init.lua будет запускаться автоматически")) / 2), 
-            math.floor(screen_height / 2) + 2, "init.lua будет запускаться автоматически", 0x00FF00)
+    drawText(math.floor((screen_width - unicode.len("Система будет запущена автоматически")) / 2), 
+            math.floor(screen_height / 2) + 2, "Система будет запущена автоматически", 0x00FF00)
     
     drawProgressBar(math.floor((screen_width - 40) / 2), math.floor(screen_height / 2) + 5, 40, 2, 100, "Готово!")
     
@@ -407,7 +466,43 @@ end]]
     computer.shutdown(true)
 end
 
--- Запуск с обработкой ошибок
+-- Главная функция
+local function main()
+    if isInstallerRunning() then
+        -- Запускаем установщик
+        local ok, err = pcall(installerMain)
+        if not ok then
+            -- Обработка ошибок установщика
+            local gpu_addr = component.list("gpu")()
+            if gpu_addr then
+                local gpu = component.proxy(gpu_addr)
+                local screen_addr = component.list("screen")()
+                if screen_addr and pcall(gpu.bind, screen_addr) then
+                    gpu.setResolution(80, 25)
+                    gpu.setBackground(0x000000)
+                    gpu.setForeground(0xFFFFFF)
+                    gpu.fill(1, 1, 80, 25, " ")
+                    gpu.set(1, 1, "Ошибка установщика: " .. tostring(err))
+                end
+            end
+            computer.pullSignal(3)
+        end
+    else
+        -- Запускаем систему
+        for address, type in component.list("filesystem") do
+            if type == "filesystem" then
+                local fs = component.proxy(address)
+                if fs.getLabel() == "TemOS" and fs.exists("system/boot.lua") then
+                    os.execute("system/boot.lua")
+                    return
+                end
+            end
+        end
+        error("Система не найдена")
+    end
+end
+
+-- Запуск
 local ok, err = pcall(main)
 if not ok then
     -- Простой вывод ошибки
@@ -420,7 +515,7 @@ if not ok then
             gpu.setBackground(0x000000)
             gpu.setForeground(0xFFFFFF)
             gpu.fill(1, 1, 80, 25, " ")
-            gpu.set(1, 1, "Ошибка: " .. tostring(err))
+            gpu.set(1, 1, "Критическая ошибка: " .. tostring(err))
         end
     end
     computer.pullSignal(3)
