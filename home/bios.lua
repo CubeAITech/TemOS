@@ -403,7 +403,7 @@ local function installerMain()
         "home/gui.lua"
     }
     
-    local base_url = "https://raw.githubusercontent.com/CubeAITech/TemOS/main/"
+    local base_url = "https://raw.githubusercontent.com/CubeAITech/TemOS/refs/heads/main/"
     
     -- Загружаем и устанавливаем каждый файл
     for i, filename in ipairs(files_to_download) do
