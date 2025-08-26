@@ -246,7 +246,7 @@ local function installerMain()
         
         -- Заголовок
         drawRect(1, 1, screen_width, 3, colors.header_bg)
-        drawText(math.floor((screen_width - unicode.len("Установка TemOS")) / 2), 2, "Установка TemOS", colors.header_text)
+        drawText(math.floor((screen_width - unicode.len("Установка TemOS")) / 2), 2, "установка TemOS", colors.header_text)
         
         -- Инструкция
         drawText(3, 5, "Выберите диск для установки:", colors.text)
@@ -276,8 +276,8 @@ local function installerMain()
         drawButton(button_x, buttons_y + 5, button_width, 3, "ВЫХОД", true, false)
         
         -- Футер
-        drawText(math.floor((screen_width - unicode.len("TemOS v1.0 - Новейшая операционная система")) / 2), 
-                screen_height - 1, "TemOS v1.0 - Новейшая операционная система", 0x888888)
+        drawText(math.floor((screen_width - unicode.len("TemOS")) / 2), 
+                screen_height - 1, "TemOS", 0x888888)
         
         -- Ждем ввода пользователя
         local signal = {computer.pullSignal()}
@@ -321,7 +321,7 @@ local function installerMain()
     showMessage("Подключение к серверу...", "raw.githubusercontent.com")
     
     local internet = component.proxy(internet_addr)
-    local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/system/boot.lua")
+    local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/boot.lua")
     if not handle then
         showMessage("Ошибка сети", "Не удалось подключиться: " .. tostring(err))
         computer.pullSignal(3)
