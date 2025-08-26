@@ -58,16 +58,7 @@ local colors = {
 
 -- Функция для проверки, является ли текущий запуск установщиком
 local function isInstallerRunning()
-    -- Проверяем, запущен ли мы из файла установщика
-    local shell = require("shell")
-    local args = {...}
-    
-    -- Если файл называется 'installer.lua' или запущен с параметром 'install'
-    if args[1] == "install" or shell.getRunningProgram():find("installer") then
-        return true
-    end
-    
-    -- Проверяем наличие метки установленной системы
+    -- Проверяем наличие установленной системы
     for address, type in component.list("filesystem") do
         if type == "filesystem" then
             local fs = component.proxy(address)
@@ -82,23 +73,6 @@ end
 
 -- Основная функция установщика
 local function installerMain()
-    -- Проверяем, не установлена ли уже система
-    if not isInstallerRunning() then
-        -- Запускаем систему вместо установщика
-        local shell = require("shell")
-        for address, type in component.list("filesystem") do
-            if type == "filesystem" then
-                local fs = component.proxy(address)
-                if fs.getLabel() == "TemOS" and fs.exists("system/boot.lua") then
-                    fs.setLabel("TemOS") -- Убеждаемся, что метка установлена
-                    os.execute("system/boot.lua")
-                    return
-                end
-            end
-        end
-        error("Система установлена, но не найдена")
-    end
-    
     -- Инициализация установщика
     local init_result, err = initialize()
     if not init_result then
@@ -246,7 +220,7 @@ local function installerMain()
         
         -- Заголовок
         drawRect(1, 1, screen_width, 3, colors.header_bg)
-        drawText(math.floor((screen_width - unicode.len("Установка TemOS")) / 2), 2, "установка TemOS", colors.header_text)
+        drawText(math.floor((screen_width - unicode.len("Установка TemOS")) / 2), 2, "Установка TemOS", colors.header_text)
         
         -- Инструкция
         drawText(3, 5, "Выберите диск для установки:", colors.text)
@@ -276,8 +250,8 @@ local function installerMain()
         drawButton(button_x, buttons_y + 5, button_width, 3, "ВЫХОД", true, false)
         
         -- Футер
-        drawText(math.floor((screen_width - unicode.len("TemOS")) / 2), 
-                screen_height - 1, "TemOS", 0x888888)
+        drawText(math.floor((screen_width - unicode.len("TemOS v1.0 - Новейшая операционная система")) / 2), 
+                screen_height - 1, "TemOS v1.0 - Новейшая операционная система", 0x888888)
         
         -- Ждем ввода пользователя
         local signal = {computer.pullSignal()}
@@ -321,7 +295,7 @@ local function installerMain()
     showMessage("Подключение к серверу...", "raw.githubusercontent.com")
     
     local internet = component.proxy(internet_addr)
-    local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/home/boot.lua")
+    local handle, err = internet.request("https://raw.githubusercontent.com/CubeAITech/TemOS/main/system/boot.lua")
     if not handle then
         showMessage("Ошибка сети", "Не удалось подключиться: " .. tostring(err))
         computer.pullSignal(3)
@@ -391,7 +365,6 @@ local function installerMain()
     -- Создаем init.lua который будет запускать систему
     local init_content = [[-- TemOS Bootloader
 local component = require("component")
-local computer = require("computer")
 
 -- Проверяем, установлена ли система
 local function systemExists()
@@ -414,9 +387,13 @@ local function boot()
         print("Загрузка TemOS...")
         os.execute("system/boot.lua")
     else
-        -- Запускаем установщик
-        print("Система не найдена. Запуск установщика...")
-        os.execute("installer.lua install")
+        -- Запускаем установщик (если он существует)
+        if fs and fs.exists("installer.lua") then
+            print("Система не найдена. Запуск установщика...")
+            os.execute("installer.lua")
+        else
+            print("Ошибка: Система не установлена и установщик не найден")
+        end
     end
 end
 
@@ -445,6 +422,9 @@ boot()
     
     -- Установка метки
     pcall(disk.setLabel, "TemOS")
+    
+    -- Удаляем установщик с диска (если он там есть)
+    pcall(disk.remove, "installer.lua")
     
     -- Финальный экран
     clearScreen()
