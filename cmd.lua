@@ -1,56 +1,90 @@
-local component = require("component")
-local gpu = component.gpu
-local event = require("event")
-local term = require("term")
-
 local commands = {
     help = {
         description = "команды",
         execute = function()
-            term.write("сегодня вам доступно\n")
+            write("сегодня вам доступно\n")
             for cmd, info in pairs(commands) do
-                term.write(string.format("  %-10s - %s\n", cmd, info.description))
+                write(string.format("  %-10s - %s\n", cmd, info.description))
             end
         end
     },
     time = {
         description = "время",
         execute = function()
-            term.write("время: " .. os.date("%H:%M:%S") .. "\n")
+            write("время: " .. os.date("%H:%M:%S") .. "\n")
         end
     },
     date = {
         description = "число седня",
         execute = function()
-            term.write("сегодня: " .. os.date("%d.%m.%Y") .. "\n")
+            write("сегодня: " .. os.date("%d.%m.%Y") .. "\n")
         end
     },
     clear = {
         description = "удалить все науй",
         execute = function()
-            term.clear()
+            component.gpu.fill(1, 1, 160, 50, " ")
+            component.gpu.set(1, 1, "")
         end
     },
     echo = {
         description = "отправить говно текст за вас",
         execute = function(args)
-            term.write("! " .. table.concat(args, " ") .. "\n")
+            write("! " .. table.concat(args, " ") .. "\n")
         end
     },
     exit = {
         description = "выйти",
         execute = function()
-            term.write("пока компьютер!\n")
+            write("пока компьютер!\n")
             os.exit()
         end
     }
 }
 
-term.write("TemOS loaded\n")
-term.write("введите 'help' для списка говно-команд\n")
+-- Функция для вывода текста через GPU
+function write(text)
+    local gpu = component.gpu
+    local w, h = gpu.getResolution()
+    local x, y = gpu.getCursor()
+    
+    for i = 1, #text do
+        local char = text:sub(i, i)
+        if char == "\n" then
+            y = y + 1
+            x = 1
+            if y > h then
+                y = h
+                gpu.copy(1, 2, w, h - 1, 0, -1)
+                gpu.fill(1, h, w, 1, " ")
+            end
+        else
+            gpu.set(x, y, char)
+            x = x + 1
+            if x > w then
+                x = 1
+                y = y + 1
+                if y > h then
+                    y = h
+                    gpu.copy(1, 2, w, h - 1, 0, -1)
+                    gpu.fill(1, h, w, 1, " ")
+                end
+            end
+        end
+        gpu.setCursor(x, y)
+    end
+end
+
+-- Инициализация
+component.gpu.setResolution(80, 25)
+component.gpu.fill(1, 1, 80, 25, " ")
+component.gpu.setCursor(1, 1)
+
+write("TemOS loaded\n")
+write("введите 'help' для списка говно-команд\n")
 
 while true do
-    term.write("> ")
+    write("> ")
     local input = io.read():gsub("^%s*(.-)%s*$", "%1")
     
     if input ~= "" then
@@ -68,11 +102,11 @@ while true do
             end)
             
             if not success then
-                term.write("ай бля ошибка: " .. err .. "\n")
+                write("ай бля ошибка: " .. err .. "\n")
             end
         else
-            term.write("ойойой нет такой команды пошел науй: " .. command .. "\n")
-            term.write("напомню 'help' введи даун\n")
+            write("ойойой нет такой команды пошел науй: " .. command .. "\n")
+            write("напомню 'help' введи даун\n")
         end
     end
 end
