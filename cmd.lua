@@ -594,104 +594,45 @@ function changeFontSize()
     end
 end
 
--- Командная строка
-function commandLine()
-    local commandHistory = {}
-    local historyIndex = 0
+-- Упрощенная командная строка
+function simpleCommandLine()
+    clear()
+    print("=== ПРОСТАЯ КОМАНДНАЯ СТРОКА ===")
+    newline()
+    print("Введите команду (или 'exit' для выхода):")
+    newline()
+    print("BIOS> ")
+    
     local currentCommand = ""
+    local inputY = cursorY - 1
     
     while true do
-        clear()
-        print("=== КОМАНДНАЯ СТРОКА BIOS ===")
-        newline()
-        print("Доступные команды:")
-        newline()
-        print("help - показать справку")
-        print("cls - очистить экран")
-        print("dir [path] - список файлов")
-        print("type <file> - показать содержимое файла")
-        print("info - системная информация")
-        print("disks - информация о дисках")
-        print("beep - тест звука")
-        print("reboot - перезагрузка")
-        print("shutdown - выключение")
-        print("exit - выход в меню")
-        newline()
-        print("Введите команду:")
-        newline()
-        
-        -- Отображение приглашения командной строки
-        print("BIOS> " .. currentCommand)
-        
-        local cursorPos = #currentCommand + 1
-        
-        while true do
-            local event = {computer.pullSignal()}
-            if event[1] == "key_down" then
-                local key = event[4]
-                local char = event[6]
-                
-                if key == 28 then -- Enter
-                    if #currentCommand > 0 then
-                        table.insert(commandHistory, currentCommand)
-                        historyIndex = #commandHistory + 1
-                        executeCommand(currentCommand)
-                        currentCommand = ""
-                        break
-                    end
-                    
-                elseif key == 14 then -- Backspace
-                    if #currentCommand > 0 then
-                        currentCommand = currentCommand:sub(1, -2)
-                        cursorPos = math.max(1, cursorPos - 1)
-                    end
-                    
-                elseif key == 1 then -- Esc
+        local event = {computer.pullSignal()}
+        if event[1] == "key_down" then
+            local key = event[4]
+            local char = event[3] -- Символ в OpenComputers находится в event[3]
+            
+            if key == 28 then -- Enter
+                if currentCommand:lower() == "exit" then
                     return
-                    
-                elseif key == 200 then -- Стрелка вверх
-                    if #commandHistory > 0 then
-                        historyIndex = math.max(1, historyIndex - 1)
-                        currentCommand = commandHistory[historyIndex] or ""
-                        cursorPos = #currentCommand + 1
-                    end
-                    
-                elseif key == 208 then -- Стрелка вниз
-                    if #commandHistory > 0 then
-                        historyIndex = math.min(#commandHistory + 1, historyIndex + 1)
-                        if historyIndex > #commandHistory then
-                            currentCommand = ""
-                        else
-                            currentCommand = commandHistory[historyIndex]
-                        end
-                        cursorPos = #currentCommand + 1
-                    end
-                    
-                elseif char and char >= 32 and char <= 126 then
-                    currentCommand = currentCommand .. string.char(char)
-                    cursorPos = cursorPos + 1
+                end
+                executeCommand(currentCommand)
+                newline()
+                print("BIOS> ")
+                currentCommand = ""
+                inputY = cursorY - 1
+                
+            elseif key == 14 then -- Backspace
+                if #currentCommand > 0 then
+                    currentCommand = currentCommand:sub(1, -2)
+                    -- Очищаем и перерисовываем строку ввода
+                    sys.gpu.fill(7, inputY, screenWidth - 6, 1, " ")
+                    sys.gpu.set(7, inputY, currentCommand)
                 end
                 
-                -- Обновление отображения команды
-                clear()
-                print("=== КОМАНДНАЯ СТРОКА BIOS ===")
-                newline()
-                print("Доступные команды:")
-                newline()
-                print("help - показать справку")
-                print("cls - очистить экран")
-                print("dir [path] - список файлов")
-                print("type <file> - показать содержимое файла")
-                print("info - системная информация")
-                print("disks - информация о дисках")
-                print("beep - тест звука")
-                print("reboot - перезагрузка")
-                print("shutdown - выключение")
-                print("exit - выход в меню")
-                newline()
-                print("Введите команду:")
-                newline()
-                print("BIOS> " .. currentCommand)
+            elseif char and char >= 32 and char <= 126 then
+                currentCommand = currentCommand .. string.char(char)
+                sys.gpu.set(7 + #currentCommand - 1, inputY, string.char(char))
             end
         end
     end
@@ -825,7 +766,7 @@ function showMenu()
     newline()
     print("4. Настройки BIOS")
     newline()
-    print("5. Командная строка")
+    print("5. Простая командная строка")
     newline()
     print("6. Перезапуск")
     newline()
@@ -947,7 +888,7 @@ function main()
             showSettingsMenu()
             
         elseif choice == 5 then
-            commandLine()
+            simpleCommandLine()
             
         elseif choice == 6 then
             computer.shutdown(true)
@@ -968,7 +909,7 @@ function handleError(err)
         print("Ошибка BIOS:")
         print(err)
         newline()
-        print("Система остановлена*.")
+        print("Система остановлена.")
     end
     while true do
         computer.pullSignal()
