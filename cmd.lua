@@ -1,117 +1,104 @@
 -- OpenComputers BIOS
--- Версия 2.2 (исправлены методы GPU)
+-- Версия 2.3 (без setCursor и других несуществующих методов)
 
--- Таблица для хранения компонентов системы
-local sys = {
-    gpu = nil,
-    screen = nil,
-    keyboard = nil,
-    beep = nil,
-    initialized = false,
-    cursorX = 1,
-    cursorY = 1
-}
-
--- Имитация require через component.proxy
-function loadComponent(componentType)
-    for address in component.list(componentType) do
-        return component.proxy(address)
-    end
-    return nil
-end
+-- Глобальные переменные для управления курсором
+local cursorX = 1
+local cursorY = 1
+local screenWidth = 80
+local screenHeight = 25
 
 -- Основная функция инициализации
 function initialize()
-    -- Поиск и инициализация GPU
-    sys.gpu = loadComponent("gpu")
-    if sys.gpu then
-        -- Поиск звукового сигнала
-        sys.beep = loadComponent("beep")
-        if sys.beep then
-            sys.beep.beep(1000, 0.1) -- Короткий звуковой сигнал
+    -- Поиск GPU
+    for address, type in component.list() do
+        if type == "gpu" then
+            sys.gpu = component.proxy(address)
+            break
         end
-        
-        -- Автопоиск экрана и подключение
-        for address in component.list("screen") do
-            if sys.gpu.getScreen() ~= address then
+    end
+    
+    -- Поиск экрана и подключение GPU
+    if sys.gpu then
+        for address, type in component.list() do
+            if type == "screen" then
                 if pcall(function() sys.gpu.bind(address) end) then
                     sys.screen = address
+                    screenWidth, screenHeight = sys.gpu.maxResolution()
+                    sys.gpu.setResolution(screenWidth, screenHeight)
+                    sys.gpu.setBackground(0x000000)
+                    sys.gpu.setForeground(0xFFFFFF)
+                    sys.gpu.fill(1, 1, screenWidth, screenHeight, " ")
                     break
                 end
-            else
-                sys.screen = address
-                break
             end
         end
-        
-        -- Установка разрешения если экран найден
-        if sys.screen then
-            local maxWidth, maxHeight = sys.gpu.maxResolution()
-            sys.gpu.setResolution(maxWidth, maxHeight)
-            sys.gpu.setBackground(0x000000)
-            sys.gpu.setForeground(0xFFFFFF)
-            sys.gpu.fill(1, 1, maxWidth, maxHeight, " ")
+    end
+    
+    -- Поиск бипера
+    for address, type in component.list() do
+        if type == "beep" then
+            sys.beep = component.proxy(address)
+            break
         end
     end
     
     -- Поиск клавиатуры
-    sys.keyboard = loadComponent("keyboard")
+    for address, type in component.list() do
+        if type == "keyboard" then
+            sys.keyboard = address
+            break
+        end
+    end
     
-    sys.initialized = true
     return true
 end
 
--- Функция вывода текста на экран
-function print(text, x, y)
-    if not sys.initialized or not sys.gpu then
-        if sys.beep then
-            sys.beep.beep(500, 0.2) -- Ошибка инициализации
-        end
+-- Функция вывода текста
+function print(text)
+    if not sys.gpu then
         return false
     end
     
-    local currentX = x or sys.cursorX
-    local currentY = y or sys.cursorY
+    local textStr = tostring(text)
     
-    sys.gpu.set(currentX, currentY, tostring(text))
+    -- Перенос строки если текст не помещается
+    if cursorX + #textStr > screenWidth then
+        newline()
+    end
     
-    -- Обновляем позицию курсора
-    local textLength = #tostring(text)
-    sys.cursorX = currentX + textLength
-    sys.cursorY = currentY
+    sys.gpu.set(cursorX, cursorY, textStr)
+    cursorX = cursorX + #textStr
     
     return true
-end
-
--- Функция очистки экрана
-function clear()
-    if sys.gpu and sys.screen then
-        local width, height = sys.gpu.getResolution()
-        sys.gpu.fill(1, 1, width, height, " ")
-        sys.cursorX = 1
-        sys.cursorY = 1
-        return true
-    end
-    return false
 end
 
 -- Переход на новую строку
 function newline()
-    sys.cursorX = 1
-    sys.cursorY = sys.cursorY + 1
-    -- Проверка на выход за границы экрана
-    local _, height = sys.gpu.getResolution()
-    if sys.cursorY > height then
-        sys.cursorY = height
-        -- Прокрутка экрана вверх
-        sys.gpu.copy(1, 2, width, height - 1, 0, -1)
-        sys.gpu.fill(1, height, width, 1, " ")
+    cursorX = 1
+    cursorY = cursorY + 1
+    
+    -- Прокрутка экрана если достигнут низ
+    if cursorY > screenHeight then
+        cursorY = screenHeight
+        if sys.gpu then
+            sys.gpu.copy(1, 2, screenWidth, screenHeight - 1, 0, -1)
+            sys.gpu.fill(1, screenHeight, screenWidth, 1, " ")
+        end
     end
 end
 
--- Простая проверка существования файла
+-- Очистка экрана
+function clear()
+    if sys.gpu then
+        sys.gpu.fill(1, 1, screenWidth, screenHeight, " ")
+        cursorX = 1
+        cursorY = 1
+    end
+end
+
+-- Проверка существования файла
 function fileExists(path)
-    local handle, reason = io.open(path, "r")
+    local handle = io.open(path, "r")
     if handle then
         handle:close()
         return true
@@ -119,144 +106,132 @@ function fileExists(path)
     return false
 end
 
--- Загрузка и выполнение файла
+-- Загрузка файла
 function dofile(path)
-    local handle, reason = io.open(path, "r")
+    local handle = io.open(path, "r")
     if not handle then
-        error("Cannot open file: " .. tostring(reason))
+        error("File not found: " .. path)
     end
     
     local code = handle:read("*a")
     handle:close()
     
-    local chunk, reason = load(code, "=" .. path, "t", _G)
-    if not chunk then
-        error("Failed to load chunk: " .. tostring(reason))
+    local func = load(code, "=" .. path)
+    if not func then
+        error("Failed to load file: " .. path)
     end
     
-    return chunk()
+    return func()
 end
 
--- Загрузка ОС из файловой системы
+-- Загрузка ОС
 function bootOS()
     if not fileExists("/boot/init.lua") then
         clear()
-        print("OpenComputers BIOS v2.2")
-        print("========================")
+        print("OpenComputers BIOS v2.3")
         newline()
-        print("ОС не найдена!")
-        print("Файл /boot/init.lua отсутствует")
+        print("OS not found!")
+        print("Missing: /boot/init.lua")
         newline()
-        print("Вставьте диск с операционной системой")
-        print("или установите ОС")
+        print("Insert OS disk or install OS")
         newline()
-        print("Нажмите любую клавишу для перезагрузки...")
+        print("Press any key to reboot...")
         
-        -- Ожидание нажатия клавиши
-        if sys.keyboard then
-            while true do
-                local eventData = {computer.pullSignal()}
-                if eventData[1] == "key_down" then
-                    break
-                end
+        -- Ожидание клавиши
+        while true do
+            local event = {computer.pullSignal()}
+            if event[1] == "key_down" then
+                break
             end
         end
-        computer.shutdown(true) -- Перезагрузка
+        computer.shutdown(true)
     end
     
-    -- Загрузка операционной системы
-    local success, reason = pcall(dofile, "/boot/init.lua")
-    
-    if not success then
+    -- Загрузка ОС
+    local ok, err = pcall(dofile, "/boot/init.lua")
+    if not ok then
         clear()
-        print("Ошибка загрузки ОС:")
-        print(tostring(reason))
+        print("Boot error:")
+        print(err)
         newline()
-        print("Нажмите любую клавишу для перезагрузки...")
-        if sys.keyboard then
-            while true do
-                local eventData = {computer.pullSignal()}
-                if eventData[1] == "key_down" then
-                    break
-                end
+        print("Press any key to reboot...")
+        while true do
+            local event = {computer.pullSignal()}
+            if event[1] == "key_down" then
+                break
             end
         end
         computer.shutdown(true)
     end
 end
 
--- Отображение информации о системе
-function showSystemInfo()
+-- Показать информацию о системе
+function showInfo()
     clear()
-    print("OpenComputers BIOS v2.2")
-    print("========================")
+    print("OpenComputers BIOS v2.3")
     newline()
-    print("Память: " .. computer.totalMemory() .. "K")
-    print("Энергия: " .. math.floor(computer.energy()))
+    print("Memory: " .. computer.totalMemory() .. "K")
+    print("Energy: " .. math.floor(computer.energy()))
     newline()
     
     if sys.gpu then
-        local width, height = sys.gpu.getResolution()
-        print("Разрешение: " .. width .. "x" .. height)
+        print("Screen: " .. screenWidth .. "x" .. screenHeight)
         newline()
     end
     
-    -- Информация о компонентах
-    print("Доступные компоненты:")
+    print("Components:")
     newline()
-    for type in component.list() do
+    for address, type in component.list() do
         print("  " .. type)
         newline()
     end
 end
 
--- Основная процедура загрузки
+-- Главная функция
 function main()
-    -- Инициализация компонентов
+    -- Инициализация системы
+    sys = {}
     if not initialize() then
-        if sys.beep then
-            sys.beep.beep(200, 1) -- Длинный звук ошибки
-        end
         return
     end
     
-    -- Отображение информации о системе
-    showSystemInfo()
+    -- Показать информацию
+    showInfo()
     
-    print("Инициализация компонентов завершена")
-    print("Загрузка ОС...")
+    print("Initialization complete")
+    print("Booting OS...")
     
+    -- Короткий звук
     if sys.beep then
         sys.beep.beep(1500, 0.1)
     end
     
-    -- Небольшая задержка для отображения информации
-    local delay = 1000000
-    while delay > 0 do
-        delay = delay - 1
-    end
+    -- Задержка
+    for i = 1, 1000000 do end
     
-    -- Загрузка операционной системы
+    -- Загрузка ОС
     bootOS()
 end
 
--- Обработка ошибок
-function errorHandler(err)
+-- Обработчик ошибок
+function handleError(err)
     if sys.beep then
         sys.beep.beep(300, 0.5)
     end
-    if sys.gpu and sys.screen then
+    if sys.gpu then
         clear()
-        print("КРИТИЧЕСКАЯ ОШИБКА BIOS:")
-        print(tostring(err))
+        print("BIOS ERROR:")
+        print(err)
         newline()
-        print("Система остановлена")
+        print("System halted")
     end
-    while true do computer.pullSignal() end
+    while true do
+        computer.pullSignal()
+    end
 end
 
--- Точка входа с обработкой ошибок
-local success, err = pcall(main)
-if not success then
-    errorHandler(err)
+-- Запуск
+local ok, err = pcall(main)
+if not ok then
+    handleError(err)
 end
