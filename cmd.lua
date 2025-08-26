@@ -304,7 +304,10 @@ function showSettingsMenu()
     
     while true do
         clear()
-        print("=== НАСТРОЙКИ BIOS ===")
+        print("=== Настройки BIOS ===")
+        newline()
+        newline()
+        newline()
         newline()
         
         for i, option in ipairs(options) do
@@ -317,7 +320,9 @@ function showSettingsMenu()
         end
         
         newline()
-        print("Используйте стрелки для навигации, Enter для выбора")
+        newline()
+        newline()
+        print("Используйте стрелки (вверх и вниз да) для навигации и Enter для выбора")
         
         local event = {computer.pullSignal()}
         if event[1] == "key_down" then
@@ -354,9 +359,9 @@ function showSettingsMenu()
                         end
                         return true
                     else
-                        print("Ошибка сохранения настроек!")
+                        print("Ошибка сохранения настроек")
                         newline()
-                        print("Нажмите любую клавишу...")
+                        print("Нажмите любую клавишу для выхода...")
                         computer.pullSignal()
                     end
                 elseif currentOption == 7 then
@@ -408,7 +413,7 @@ function changeColorSetting(settingType)
         end
         
         newline()
-        print("Enter - выбрать, Escape - отмена")
+        print("Enter - выбрать, Esc - отмена")
         
         -- Временно применяем выбранный цвет для предпросмотра
         local tempValue = colors[currentIndex].value
@@ -454,13 +459,13 @@ end
 function changeFontSize()
     while true do
         clear()
-        print("Выберите размер шрифта (1-6)")
+        print("Выберите размер шрифта (от 1 до 6)")
         newline()
         print("Текущий размер: " .. settings.fontSize)
         newline()
-        print("Стрелки влево/вправо - изменить")
+        print("Стрелки влево и вправо - изменить")
         newline()
-        print("Enter - подтвердить, Escape - отмена")
+        print("Enter - подтвердить, Esc - отмена")
         
         local event = {computer.pullSignal()}
         if event[1] == "key_down" then
