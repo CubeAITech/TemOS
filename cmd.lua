@@ -4,11 +4,11 @@ local screenWidth = 80
 local screenHeight = 25
 local sys = {}
 local settings = {
-    textColor = 0xFFFFFF,      -- Белый по умолчанию
-    bgColor = 0x000000,        -- Черный по умолчанию
-    fontSize = 1,              -- Размер шрифта (1-6)
-    beepEnabled = true,        -- Звуковые эффекты
-    autoBoot = false           -- Автозагрузка ОС
+    textColor = 0xFFFFFF,      
+    bgColor = 0x000000,        
+    fontSize = 1,              
+    beepEnabled = true,        
+    autoBoot = false           
 }
 
 function initialize()
@@ -49,18 +49,15 @@ function initialize()
         end
     end
     
-    -- Загрузка сохраненных настроек
     loadSettings()
     
     return true
 end
 
--- Вспомогательная функция для trim
 function string.trim(s)
     return s:match("^%s*(.-)%s*$")
 end
 
--- Загрузка настроек из файла
 function loadSettings()
     if fileExists("/bios/settings.cfg") then
         local content = loadFile("/bios/settings.cfg")
@@ -83,7 +80,6 @@ function loadSettings()
     end
 end
 
--- Сохранение настроек в файл
 function saveSettings()
     local content = ""
     for key, value in pairs(settings) do
@@ -94,7 +90,6 @@ function saveSettings()
         end
     end
     
-    -- Создаем директорию /bios если ее нет
     for address, type in component.list() do
         if type == "filesystem" then
             local fs = component.proxy(address)
@@ -106,7 +101,6 @@ function saveSettings()
         end
     end
     
-    -- Сохраняем настройки
     for address, type in component.list() do
         if type == "filesystem" then
             local fs = component.proxy(address)
@@ -123,16 +117,13 @@ function saveSettings()
     return false
 end
 
--- Применение текущих настроек
 function applySettings()
     if sys.gpu then
         sys.gpu.setBackground(settings.bgColor)
         sys.gpu.setForeground(settings.textColor)
-        -- Попытка установить шрифт, если поддерживается
         if sys.gpu.setFont then
             pcall(function() 
                 local maxFont = 1
-                -- Определяем максимальный поддерживаемый размер шрифта
                 for i = 1, 6 do
                     if pcall(function() return sys.gpu.setFont(i) end) then
                         maxFont = i
@@ -177,7 +168,6 @@ function newline()
     end
 end
 
--- Очистка экрана
 function clear()
     if sys.gpu then
         sys.gpu.fill(1, 1, screenWidth, screenHeight, " ")
@@ -186,7 +176,6 @@ function clear()
     end
 end
 
--- Проверка существования файла через component.filesystem
 function fileExists(path)
     for address, type in component.list() do
         if type == "filesystem" then
@@ -201,7 +190,6 @@ function fileExists(path)
     return false
 end
 
--- Проверка существования директории
 function dirExists(path)
     for address, type in component.list() do
         if type == "filesystem" then
@@ -216,7 +204,6 @@ function dirExists(path)
     return false
 end
 
--- Загрузка файла через component.filesystem
 function loadFile(path)
     for address, type in component.list() do
         if type == "filesystem" then
@@ -239,7 +226,6 @@ function loadFile(path)
     error("Невозможно прочитать файл: " .. path)
 end
 
--- Запись в файл
 function writeFile(path, content)
     for address, type in component.list() do
         if type == "filesystem" then
@@ -257,7 +243,6 @@ function writeFile(path, content)
     return false
 end
 
--- Список файлов в директории
 function listFiles(path)
     local files = {}
     for address, type in component.list() do
@@ -277,7 +262,6 @@ function listFiles(path)
     return files
 end
 
--- Загрузка и выполнение файла
 function dofile(path)
     local content = loadFile(path)
     local func, reason = load(content, "=" .. path)
@@ -287,7 +271,6 @@ function dofile(path)
     return func()
 end
 
--- Получение информации о дисках
 function getDiskInfo()
     local disks = {}
     
@@ -315,7 +298,6 @@ function getDiskInfo()
     return disks
 end
 
--- Отображение информации о дисках
 function showDiskInfo()
     local disks = getDiskInfo()
     
@@ -337,7 +319,6 @@ function showDiskInfo()
     end
 end
 
--- Показать информацию о системе
 function showInfo()
     clear()
     print("BIOS")
@@ -377,7 +358,7 @@ function showSettingsMenu()
     
     while true do
         clear()
-        print("=== НАСТРОЙКИ BIOS ===")
+        print("=== Настройки BIOS ===")
         newline()
         
         for i, option in ipairs(options) do
@@ -559,6 +540,7 @@ function changeFontSize()
         end
         
         if maxSupported == 1 then
+            newline()
             print("Смена шрифтов не поддерживается!")
             newline()
         end
@@ -690,7 +672,7 @@ function executeCommand(cmd)
         
     elseif command == "dir" then
         local path = args[2] or "/"
-        print("Содержимое " .. path .. ":")
+        print("содержимое " .. path .. ":")
         newline()
         
         if dirExists(path) then
@@ -704,7 +686,7 @@ function executeCommand(cmd)
                 end
             end
         else
-            print("Директория не существует: " .. path)
+            print("указанное тобой не существует: " .. path)
         end
         
     elseif command == "type" then
@@ -717,11 +699,11 @@ function executeCommand(cmd)
         
         if fileExists(filename) then
             local content = loadFile(filename)
-            print("Содержимое файла " .. filename .. ":")
+            print("содержимое файла " .. filename .. ":")
             newline()
             print(content)
         else
-            print("Файл не существует: " .. filename)
+            print("файла  не существует: " .. filename)
         end
         
     elseif command == "info" then
@@ -733,9 +715,9 @@ function executeCommand(cmd)
     elseif command == "beep" then
         if sys.beep then
             sys.beep.beep(1000, 0.3)
-            print("Звуковой сигнал воспроизведен")
+            print("звук. сигнал воспроизведен")
         else
-            print("Звуковое устройство не найдено")
+            print("звук. устройства нет")
         end
         
     elseif command == "reboot" then
@@ -748,8 +730,8 @@ function executeCommand(cmd)
         return true
         
     else
-        print("Неизвестная команда: " .. command)
-        print("Введите 'help' для списка команд")
+        print("твоя команда не найдена: " .. command)
+        print("введи help для списка команд")
     end
     
     newline()
@@ -758,10 +740,9 @@ function executeCommand(cmd)
     return false
 end
 
--- Интерактивное меню BIOS
 function showMenu()
     clear()
-    print("BIOS - Главное меню")
+    print("BIOS")
     newline()
     newline()
     newline()
@@ -774,7 +755,7 @@ function showMenu()
     newline()
     print("4. Настройки BIOS")
     newline()
-    print("5. Простая командная строка")
+    print("5. ROOT-управление (не доработано)")
     newline()
     print("6. Перезапуск")
     newline()
@@ -804,9 +785,9 @@ end
 
 -- Загрузка ОС (опциональная)
 function bootOS()
-    if not fileExists("/boot/init.lua") then
+    if not fileExists("/init.lua") then
         clear()
-        print("OS не найдена: /boot/init.lua")
+        print("OS не найдена: /init.lua")
         newline()
         print("Нажмите на любую кнопку для того что бы вернуться в меню...")
         
@@ -821,7 +802,7 @@ function bootOS()
     end
     
     -- Загрузка ОС
-    local ok, err = pcall(dofile, "/boot/init.lua")
+    local ok, err = pcall(dofile, "/init.lua")
     if not ok then
         clear()
         print("Ошибка OS:")
