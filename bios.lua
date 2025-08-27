@@ -749,68 +749,20 @@ function chatCommandLine()
     clear()
     print("=== Чат ===")
     newline()
-    print("Введите команду ниже (или юзайте 'выйти' для выхода):")
+    print("Введите команду ниже (или юзайте exit для выхода):")
     newline()
     
     while true do
         print("YOU: ")
-        local currentCommand = ""
-        local inputX = cursorX  -- Запоминаем позицию X после "BIOS> "
-        local inputY = cursorY  -- Запоминаем позицию Y
+        local command = russianInput()
         
-        while true do
-            local event = {computer.pullSignal()}
-            if event[1] == "key_down" then
-                local key = event[4]
-                local char = event[3] -- Символ в OpenComputers находится в event[3]
-                
-                if key == 28 then -- Enter
-                    if currentCommand:lower() == "exit" then
-                        return
-                    end
-                    newline()  -- Переходим на новую строку перед выводом результата
-                    chatCommand(currentCommand)
-                    newline()
-                    break  -- Выходим из внутреннего цикла для нового ввода
-                    
-                elseif key == 14 then -- Backspace
-                    if #currentCommand > 0 then
-                        currentCommand = currentCommand:sub(1, -2)
-                        -- Очищаем только область ввода и перерисовываем
-                        sys.gpu.fill(inputX, inputY, screenWidth - inputX + 1, 1, " ")
-                        sys.gpu.set(inputX, inputY, currentCommand)
-                        cursorX = inputX + #currentCommand
-                        cursorY = inputY
-                    end
-                    
-                elseif char and (char >= 32 and char <= 126) then
-                    -- Английские символы
-                    currentCommand = currentCommand .. string.char(char)
-                    sys.gpu.set(inputX + #currentCommand - 1, inputY, string.char(char))
-                    cursorX = inputX + #currentCommand
-                    cursorY = inputY
-                    
-                elseif event[1] == "clipboard" then
-                    -- Обработка русского текста из буфера обмена
-                    local text = event[3]
-                    if text then
-                        currentCommand = currentCommand .. text
-                        sys.gpu.set(inputX, inputY, currentCommand)
-                        cursorX = inputX + #currentCommand
-                        cursorY = inputY
-                    end
-                end
-            elseif event[1] == "paste" then
-                -- Альтернативный способ обработки вставки текста
-                local text = event[3]
-                if text then
-                    currentCommand = currentCommand .. text
-                    sys.gpu.set(inputX, inputY, currentCommand)
-                    cursorX = inputX + #currentCommand
-                    cursorY = inputY
-                end
-            end
+        if command:lower() == "exit" then
+            return
         end
+        
+        newline()
+        chatCommand(command)
+        newline()
     end
 end
 
@@ -890,27 +842,6 @@ function russianInput(prompt)
     end
 end
 
--- Обновленная функция chatCommandLine с поддержкой русского ввода
-function chatCommandLine()
-    clear()
-    print("=== Чат ===")
-    newline()
-    print("Введите команду ниже (или юзайте exit для выхода):")
-    newline()
-    
-    while true do
-        print("YOU: ")
-        local command = russianInput()
-        
-        if command:lower() == "exit" then
-            return
-        end
-        
-        newline()
-        chatCommand(command)
-        newline()
-    end
-end
 ---
 ---
 ---
@@ -925,32 +856,29 @@ function chatCommand(cmd)
         return
     end
     
-    local command = args[1]:lower()
+    local command = cmd:lower()
+    local firstWord = args[1]:lower() 
     
-    if command == "привет" then
+    if firstWord == "привет" then
         print("BOT: Привет!")
-
-    elseif command == "хай" then
+    elseif firstWord == "хай" then
         print("BOT: Хай!")
 
-    elseif command == "как дела" then
+    elseif command == "как дела" or command == "как дела?" then
         print("BOT: Идеально.")
-
-    elseif command == "как дела?" then
-        print("BOT: Идеально.")
-    
-    elseif command == "питон" then
-        print("BOT: Python - язык программирования.")
-
-    elseif command == "python" then
-        print("BOT: Python - язык программирования.")
 
     elseif command == "русский алфавит" then
         print("BOT: Я что тебе блять!? Сказочник петушарочник?!")
         newline()
         print("BOT: Какого хера я тебе должен это говорить! Петушара ебаная!")
     
-    elseif command == "очистка" then
+    elseif firstWord == "питон" then
+        print("BOT: Python - язык программирования.")
+
+    elseif firstWord == "python" then
+        print("BOT: Python - язык программирования.")
+    
+    elseif firstWord == "очистка" then
         clear()
         return
     
