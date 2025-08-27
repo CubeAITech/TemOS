@@ -749,7 +749,7 @@ function chatCommandLine()
     clear()
     print("=== Чат ===")
     newline()
-    print("Введите команду ниже (или юзайте exit для выхода):")
+    print("Введите команду ниже (или юзайте 'выйти' для выхода):")
     newline()
     
     while true do
@@ -929,13 +929,33 @@ function chatCommand(cmd)
     
     if command == "привет" then
         print("BOT: Привет!")
-        
-    elseif command == "clear" then
+
+    elseif command == "хай" then
+        print("BOT: Хай!")
+
+    elseif command == "как дела" then
+        print("BOT: Идеально.")
+
+    elseif command == "как дела?" then
+        print("BOT: Идеально.")
+    
+    elseif command == "питон" then
+        print("BOT: Python - язык программирования.")
+
+    elseif command == "python" then
+        print("BOT: Python - язык программирования.")
+
+    elseif command == "русский алфавит" then
+        print("BOT: Я что тебе блять!? Сказочник петушарочник?!")
+        newline()
+        print("BOT: Какого хера я тебе должен это говорить! Петушара ебаная!")
+    
+    elseif command == "очистка" then
         clear()
         return
-        
-    elseif command == "помощь" or command == "help" then
-        print("BOT: пока доступно: привет, clear")
+    
+    else
+        print("BOT: Пошел нахуй, блядина! Я еще не знаю как на это ответить!")
     end    
 end
 ---- ВАЖНО ----
