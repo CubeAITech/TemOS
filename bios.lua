@@ -914,7 +914,7 @@ function crashSystem()
     clear()
     
     -- Выводим сообщение об ошибке
-    print("Поздравляю! Ты поймал локер твоего компьютера.")
+    print("Поздравляю! Ты за свой базар словил слет твоего компьютера.")
     newline()
     print("Чисто по приколу, мы тебе крашнули память с ядром")
     print("Адрес памяти: 0x" .. string.format("%08X", math.random(0, 0xFFFFFFFF)))
@@ -925,28 +925,22 @@ function crashSystem()
     newline()
     print("AS: Дамп памяти.")
     
-    -- Имитация дампа памяти
     for i = 1, 10 do
         local line = ""
         for j = 1, 8 do
             line = line .. string.format("%04X ", math.random(0, 0xFFFF))
         end
         print("0x" .. string.format("%04X", i * 0x100) .. ": " .. line)
-        os.sleep(0.2)
     end
     
     newline()
     print("Работа завершена. Вы ахуели. Идите нахуй.")
     
-    -- Мигающий курсор в конце
     while true do
         sys.gpu.set(1, cursorY, "_")
-        os.sleep(0.5)
         sys.gpu.set(1, cursorY, " ")
-        os.sleep(0.5)
     end
     
-    -- Восстановление настроек (хотя до этой строки выполнение не дойдет)
     sys.gpu.setBackground(oldBackground)
     sys.gpu.setForeground(oldForeground)
 end
