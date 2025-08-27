@@ -783,14 +783,132 @@ function chatCommandLine()
                         cursorY = inputY
                     end
                     
-                elseif char and char >= 32 and char <= 126 then
+                elseif char and (char >= 32 and char <= 126) then
+                    -- Английские символы
                     currentCommand = currentCommand .. string.char(char)
                     sys.gpu.set(inputX + #currentCommand - 1, inputY, string.char(char))
+                    cursorX = inputX + #currentCommand
+                    cursorY = inputY
+                    
+                elseif event[1] == "clipboard" then
+                    -- Обработка русского текста из буфера обмена
+                    local text = event[3]
+                    if text then
+                        currentCommand = currentCommand .. text
+                        sys.gpu.set(inputX, inputY, currentCommand)
+                        cursorX = inputX + #currentCommand
+                        cursorY = inputY
+                    end
+                end
+            elseif event[1] == "paste" then
+                -- Альтернативный способ обработки вставки текста
+                local text = event[3]
+                if text then
+                    currentCommand = currentCommand .. text
+                    sys.gpu.set(inputX, inputY, currentCommand)
                     cursorX = inputX + #currentCommand
                     cursorY = inputY
                 end
             end
         end
+    end
+end
+
+-- Альтернативная функция для ввода с поддержкой русских символов
+function russianInput(prompt)
+    if prompt then
+        print(prompt)
+    end
+    
+    local input = ""
+    local inputX = cursorX
+    local inputY = cursorY
+    
+    -- Таблица преобразования кодов клавиш в русские символы (раскладка ЙЦУКЕН)
+    local russianLayout = {
+        [16] = "й", [17] = "ц", [18] = "у", [19] = "к", [20] = "е", [21] = "н",
+        [22] = "г", [23] = "ш", [24] = "щ", [25] = "з", [26] = "х", [27] = "ъ",
+        [30] = "ф", [31] = "ы", [32] = "в", [33] = "а", [34] = "п", [35] = "р",
+        [36] = "о", [37] = "л", [38] = "д", [39] = "ж", [40] = "э",
+        [44] = "я", [45] = "ч", [46] = "с", [47] = "м", [48] = "и", [49] = "т",
+        [50] = "ь", [51] = "б", [52] = "ю",
+        
+        -- Заглавные буквы с Shift
+        [112] = "Й", [113] = "Ц", [114] = "У", [115] = "К", [116] = "Е", [117] = "Н",
+        [118] = "Г", [119] = "Ш", [120] = "Щ", [121] = "З", [122] = "Х", [123] = "Ъ",
+        [126] = "Ф", [127] = "Ы", [128] = "В", [129] = "А", [130] = "П", [131] = "Р",
+        [132] = "О", [133] = "Л", [134] = "Д", [135] = "Ж", [136] = "Э",
+        [140] = "Я", [141] = "Ч", [142] = "С", [143] = "М", [144] = "И", [145] = "Т",
+        [146] = "Ь", [147] = "Б", [148] = "Ю"
+    }
+    
+    while true do
+        local event = {computer.pullSignal()}
+        
+        if event[1] == "key_down" then
+            local key = event[4]
+            local char = event[3]
+            local shift = event[2] == 42 or event[2] == 54
+            
+            if key == 28 then -- Enter
+                return input
+                
+            elseif key == 14 then -- Backspace
+                if #input > 0 then
+                    input = input:sub(1, -2)
+                    sys.gpu.fill(inputX, inputY, screenWidth - inputX + 1, 1, " ")
+                    sys.gpu.set(inputX, inputY, input)
+                    cursorX = inputX + #input
+                    cursorY = inputY
+                end
+                
+            elseif russianLayout[key] then
+                -- Русские символы
+                input = input .. russianLayout[key]
+                sys.gpu.set(inputX + #input - 1, inputY, russianLayout[key])
+                cursorX = inputX + #input
+                cursorY = inputY
+                
+            elseif char and (char >= 32 and char <= 126) then
+                -- Английские символы
+                input = input .. string.char(char)
+                sys.gpu.set(inputX + #input - 1, inputY, string.char(char))
+                cursorX = inputX + #input
+                cursorY = inputY
+            end
+            
+        elseif event[1] == "clipboard" or event[1] == "paste" then
+            -- Вставка текста из буфера обмена
+            local text = event[3]
+            if text then
+                input = input .. text
+                sys.gpu.set(inputX, inputY, input)
+                cursorX = inputX + #input
+                cursorY = inputY
+            end
+        end
+    end
+end
+
+-- Обновленная функция chatCommandLine с поддержкой русского ввода
+function chatCommandLine()
+    clear()
+    print("=== Чат ===")
+    newline()
+    print("Введите команду ниже (или юзайте exit для выхода):")
+    newline()
+    
+    while true do
+        print("YOU: ")
+        local command = russianInput()
+        
+        if command:lower() == "exit" then
+            return
+        end
+        
+        newline()
+        chatCommand(command)
+        newline()
     end
 end
 ---
@@ -811,17 +929,13 @@ function chatCommand(cmd)
     
     if command == "привет" then
         print("BOT: Привет!")
-    
-    elseif command == "как дела" then
-        print("BOT: У меня все хорошо!")
         
     elseif command == "clear" then
         clear()
         return
-    
-    elseif command == "exit" then
-        return true
         
+    elseif command == "помощь" or command == "help" then
+        print("BOT: пока доступно: привет, clear")
     end    
 end
 ---- ВАЖНО ----
