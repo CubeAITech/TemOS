@@ -812,7 +812,7 @@ function chatCommand(cmd)
     if command == "привет" then
         print("BOT: Привет!")
     
-    elseif command == "как дела" or command == "как дела?" then
+    elseif command == "как дела" then
         print("BOT: У меня все хорошо!")
         
     elseif command == "clear" then
