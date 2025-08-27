@@ -916,12 +916,18 @@ function crashSystem()
     -- Выводим сообщение об ошибке
     print("Поздравляю! Ты за свой базар словил слет твоего компьютера.")
     newline()
+    computer.pullSignal(1)
     print("Чисто по приколу, мы тебе крашнули память с ядром")
-    print("Адрес памяти: 0x" .. string.format("%08X", math.random(0, 0xFFFFFFFF)))
-    print("Код ошибки: 0x" .. string.format("%04X", math.random(0, 0xFFFF)))
     newline()
+    print("Адрес памяти: 0x" .. string.format("%08X", math.random(0, 0xFFFFFFFF)))
+    newline()
+    print("Код ошибки: 0x" .. string.format("%04X", math.random(0, 0xFFFF)))
+    computer.pullSignal(1)
+    newline()
+    computer.pullSignal(1)
     print("Так же пару ошибок: Stack overflow в модуле kernel32.ocm")
     print("Невозможно продолжить выполнение системы")
+    computer.pullSignal(1)
     newline()
     print("AS: Дамп памяти.")
     
@@ -932,9 +938,10 @@ function crashSystem()
         end
         print("0x" .. string.format("%04X", i * 0x100) .. ": " .. line)
     end
-    
+
+    computer.pullSignal(1)
     newline()
-    print("Работа завершена. Вы ахуели. Идите нахуй.")
+    print("--- Работа завершена. За ваш базар, ваш ПК выебан.")
     
     while true do
         sys.gpu.set(1, cursorY, "_")
