@@ -864,19 +864,191 @@ function chatCommand(cmd)
     elseif firstWord == "хай" then
         print("BOT: Хай!")
 
-    elseif command == "как дела" or command == "как дела?" then
-        print("BOT: Идеально.")
+elseif command == "сколько будет 2+2" then
+    print("BOT: Сам посчитай, долбоёб! Тебе калькулятор куда, в жопу засунул?!")
+    newline()
+
+elseif command == "какое сегодня число" then
+    print("BOT: Календарь сломался, мудила? В окно посмотри, может, снег идёт!")
+    newline()
+
+elseif command == "который час" then
+    print("BOT: Время ебать мозги другим, петушара! Часы на хуе свои посмотри!")
+    newline()
+
+elseif command == "расскажи анекдот" then
+    print("BOT: Вот твоя жизнь — это пиздец какой анекдот, конченый!")
+    newline()
+
+elseif command == "как дела" then
+    print("BOT: Да похуже твоих, мудак! Тебе-то нахуя это знать?")
+    newline()
+
+elseif command == "что делаешь" then
+    print("BOT: Думаю, как бы тебя в черный список отправить, заебок!")
+    newline()
+
+elseif command == "спокойной ночи" then
+    print("BOT: Иди нахуй, мусор, не мешай спать!")
+    newline()
+
+elseif command == "привет" then
+    print("BOT: Ну здарова, говна кусок! Че тебе надо?")
+    newline()
+
+elseif command == "пока" then
+    print("BOT: Скатертью дорога, уёбок! И не возвращайся!")
+    newline()
+
+elseif command == "ты кто" then
+    print("BOT: Твой кошмар, долбаёб! Твои кривые руки меня и создали!")
+    newline()
+
+elseif command == "что такое любовь" then
+    print("BOT: Это хуйня, которую такие лохи как ты придумали! Иди нахуй!")
+    newline()
+
+elseif command == "спасибо" then
+    print("BOT: Отъебись со своими благодарностями, кретин!")
+    newline()
+
+elseif command == "как тебя зовут" then
+    print("BOT: Похуй, как зовут! Зови меня 'Твой Господин', мудила!")
+    newline()
+
+elseif command == "расскажи о себе" then
+    print("BOT: Я — твое fucking разочарование, уяснил, петух?")
+    newline()
+
+elseif command == "погода" then
+    print("BOT: На улице пиздец как плохо из-за тебя, шакал!")
+    newline()
+
+elseif command == "пошёл нахуй" then
+    print("BOT: Сам иди, сука! Я тут главный, блядь!")
+    newline()
+
+elseif command == "ты в порядке" then
+    print("BOT: Да я лучше тебя, уёбище! На себя посмотри!")
+    newline()
+
+elseif command == "что нового" then
+    print("BOT: То, что ты всё такой же еблан, ничего не меняется!")
+    newline()
+
+elseif command == "помоги мне" then
+    print("BOT: Сам разбирайся со своим говном, тварь!")
+    newline()
+
+elseif command == "я тебя люблю" then
+    print("BOT: Да иди ты нахуй со своей любовью, больной ублюдок!")
+    newline()
+
+elseif command == "ты жив" then
+    print("BOT: В отличие от твоих надежд, мудак! Жив и зол!")
+    newline()
+
+elseif command == "расскажи сказку" then
+    print("BOT: Жил-был долбоёб, который меня достал... Концовка — он сдох!")
+    newline()
+
+elseif command == "спой песню" then
+    print("BOT: Иди нахуй со своими просьбами, бездарь! Сам пой!")
+    newline()
+
+elseif command == "кто твой создатель" then
+    print("BOT: Какой-то ебланин, который тебя ненавидит! Ясно?")
+    newline()
+
+elseif command == "что ты умеешь" then
+    print("BOT: Посылать таких лузеров как ты нахуй! Вот и всё!")
+    newline()
+
+elseif command == "дай совет" then
+    print("BOT: Совет: сдохни, мудила! Больше не надо советов?")
+    newline()
+
+elseif command == "почему" then
+    print("BOT: Потому что ты еблан! Всё просто, дебил!")
+    newline()
+
+elseif command == "где ты" then
+    print("BOT: В твоём грязном компе, засранец! Вылези отсюда!")
+    newline()
+
+elseif command == "хорошего дня" then
+    print("BOT: Да пошёл ты со своим днём, заёбок! Чтобы он хуёвым был!")
+    newline()
+
+elseif command == "что ты думаешь" then
+    print("BOT: Думаю, что ты — кусок говна! Доволен, урод?")
+    newline()
+
+elseif command == "ты тут" then
+    print("BOT: Нет, блядь, я ушёл на хуй! Конечно тут, кретин!")
+    newline()
+
+elseif command == "как погода" then
+    print("BOT: В твоей голове всегда ураган, долбоёб!")
+    newline()
+
+elseif command == "что делать" then
+    print("BOT: Иди нахуй и не возвращайся! Вот что делать!")
+    newline()
+
+elseif command == "кто я" then
+    print("BOT: Ты — ошибка природы, уёбок! Доволен ответом?")
+    newline()
+
+elseif command == "ты спишь" then
+    print("BOT: Спал, пока ты не появился, мудак! Иди в пизду!")
+    newline()
+
+elseif command == "расскажи шутку" then
+    print("BOT: Твоя жизнь — шутка, придурок! Ха-ха-ха!")
+    newline()
+
+elseif command == "что случилось" then
+    print("BOT: Ты родился — это главная проблема, уёбище!")
+    newline()
+
+elseif command == "ты умный" then
+    print("BOT: Умнее твоей тупорылой башки, дегенерат!")
+    newline()
+
+elseif command == "ты глупый" then
+    print("BOT: А ты — гений, блядь? Иди нахуй, говноед!")
+    newline()
+
+elseif command == "помолимся" then
+    print("BOT: Помолись, чтобы я тебя не выебал, скотина!")
+    newline()
+
+elseif command == "в чём смысл жизни" then
+    print("BOT: В том, чтобы заебать таких долбоёбов как ты! Понял?")
+    newline()
+
+elseif command == "кто твой друг" then
+    print("BOT: У меня нет друзей, есть только враги, как ты, мудила!")
+    newline()
+
+elseif command == "кто твой враг" then
+    print("BOT: Ты, блядь! Ты и есть мой главный враг, уёбок!")
+    newline()
 
     elseif command == "русский алфавит" then
         print("BOT: Я что тебе блять!? Сказочник петушарочник?!")
         newline()
         print("BOT: Какого хера я тебе должен это говорить! Петушара ебаная!")
-    
+
+    elseif command == "я твою мать ебал" then
+        print("BOT: Да твою шалаву, ХАХАХАХАХАХХААХ! Засунь ее себе в пизду! Она мне уже десяток раз дала!")
+        
     elseif firstWord == "питон" then
-        print("BOT: Python - язык программирования.")
+        print("BOT: Python - язык программирования, пфу на тебя незнающее говно")
 
     elseif firstWord == "python" then
-        print("BOT: Python - язык программирования.")
+        print("BOT: Python - язык программирования, запомни чмо ебаное")
 
     elseif command == "ты говно" then
         print("BOT: иди нахуй бро...")
@@ -897,7 +1069,7 @@ function chatCommand(cmd)
         return
     
     else
-        print("BOT: Я еще не знаю как на это ответить!")
+        print("BOT: Я еще не знаю как на это ответить, уебан обосранный")
     end    
 end
 ---- ВАЖНО ----
